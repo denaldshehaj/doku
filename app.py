@@ -20,19 +20,19 @@ ROLE_LABELS = {auth.ADMIN: "Administrator", auth.EMPLOYEE: "Punonjës"}
 
 
 def inject_css():
+    # Theme-neutral styling only: no hardcoded colors, so Streamlit's built-in
+    # Light/Dark theme switcher (☰ → Settings → Theme) keeps working.
     st.markdown(
         """
         <style>
-          #MainMenu, footer {visibility: hidden;}
           .stButton>button, .stDownloadButton>button {border-radius: 8px;}
-          section[data-testid="stSidebar"] {background: #11151c;}
           div[data-testid="stMetric"] {
-              background: #1b212b; border: 1px solid #2a3340;
+              border: 1px solid rgba(128,128,128,0.25);
               border-radius: 12px; padding: 14px 16px;
           }
           .doku-badge {
-              background:#1b212b; border:1px solid #2a3340; border-radius:10px;
-              padding:10px 12px; font-size:0.9rem;
+              border: 1px solid rgba(128,128,128,0.30);
+              border-radius: 10px; padding: 10px 12px; font-size: 0.9rem;
           }
         </style>
         """,
