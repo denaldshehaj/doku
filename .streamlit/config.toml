@@ -1,0 +1,10 @@
+# DOKU — Streamlit configuration
+[client]
+# "viewer" hides developer features for end users:
+#   - removes the "Deploy" button
+#   - disables developer keyboard shortcuts (e.g. "c" = Clear cache, "r" = Rerun)
+# The Settings menu (Light/Dark theme switcher) stays available.
+toolbarMode = "viewer"
+
+[browser]
+gatherUsageStats = false

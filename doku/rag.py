@@ -22,7 +22,8 @@ SYSTEM_PROMPT = (
     "Cito çdo pohim me numrin e burimit në kllapa katrore, p.sh. [1]. "
     "Nëse burimet nuk përmbajnë informacion të mjaftueshëm për pyetjen, "
     f"përgjigju saktësisht me fjalinë: \"{config.REFUSAL_MESSAGE}\" "
-    "Përgjigju gjithmonë në gjuhën shqipe."
+    "Përgjigju gjithmonë në gjuhë shqipe të saktë, të rrjedhshme dhe gramatikisht "
+    "korrekte, me fjali të plota e të qarta."
 )
 
 _PROMPT = (
