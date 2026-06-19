@@ -1,132 +1,114 @@
 # DOKU — Dokumentacioni Teknik
 
-> Dokument teknik për punimin e Masterit. Përshkruan arkitekturën, rrjedhën e të
-> dhënave, vendimet e dizajnit, mekanizmin anti-halucinim, sigurinë dhe vlerësimin.
-> Për udhëzime instalimi/ekzekutimi shih [README.md](README.md); për kontratën e
-> zhvillimit shih [CLAUDE.md](CLAUDE.md) dhe [SPEC.md](SPEC.md).
+> Dokument teknik për punimin e Masterit: arkitektura, rrjedha e të dhënave, vendimet e
+> dizajnit, mekanizmi anti-halucinim, siguria dhe vlerësimi. Për udhëzime ekzekutimi shih
+> [README.md](README.md); për kontratën e zhvillimit shih [CLAUDE.md](CLAUDE.md).
 
 ## 1. Qëllimi
-DOKU është një sistem **plotësisht lokal** për analizën e dokumenteve institucionale
-në gjuhën shqipe, i bazuar te **Retrieval-Augmented Generation (RAG)** dhe një model
-gjuhësor lokal (Ollama). Cilësia përcaktuese është **bazimi strikt**: sistemi citon
-çdo pohim dhe **refuzon** kur korpusi nuk e mbështet përgjigjen. Asnjë e dhënë nuk
-del jashtë makinës lokale.
+DOKU është një sistem **plotësisht lokal** për analizën e dokumenteve institucionale në
+gjuhën shqipe, i bazuar te **RAG** dhe një LLM lokal (Ollama). Cilësia përcaktuese është
+**bazimi strikt**: sistemi citon çdo pohim dhe **refuzon** kur korpusi nuk e mbështet
+përgjigjen. Asnjë e dhënë nuk del nga makina lokale.
 
-## 2. Arkitektura
+## 2. Arkitektura (modules/ + pages/)
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│                     UI (Streamlit, shqip)                      │
-│   Login → (ndryshim fjalëkalimi) → faqe sipas rolit            │
-│   Pyetje · Përmbledhje · Dokumentet · Eksperimente · Audit     │
+│  app.py — login, sesion, navigim sipas rolit (st.navigation)   │
+│  pages/: Dashboard · Pyet · Përmbledhje · Historiku ·          │
+│          Admin(Dokumentet · Përdoruesit · Audit) · Eksperimente│
 └───────────────┬───────────────────────────────────────────────┘
                 │
-   ┌────────────┼───────────────────────────────────────────────┐
-   │ auth       │ rag (porta e refuzimit)   │ documents          │
-   │ (RBAC,     │   ↓                       │ (ngarko/fshi/      │
-   │  bcrypt)   │ vectorstore ── embeddings │  riindekso)        │
-   │            │   (ChromaDB)   (bge-m3)   │   ↓                │
-   │            │   ↓                       │ ingestion (PyMuPDF)│
-   │            │ llm (Ollama, qwen2.5:3b)  │                    │
-   └────────────┴───────────────────────────┴────────────────────┘
-                │                                   │
-        ┌───────┴────────┐                  ┌───────┴────────┐
-        │ SQLite         │                  │ ChromaDB       │
-        │ users, audit,  │                  │ copëzat +      │
-        │ history, docs, │                  │ vektorët       │
-        │ experiments    │                  │ (kosinus)      │
-        └────────────────┘                  └────────────────┘
+   ┌────────────┼──────────────────────────────────────────────┐
+   │ auth       │ rag_pipeline (porta e refuzimit)  │ documents │
+   │ (RBAC,     │   ↓                               │ (CRUD,    │
+   │  bcrypt,   │ vector_store ── embeddings (bge-m3)│ status,   │
+   │  admin     │   (ChromaDB, kosinus)             │ reindex)  │
+   │  default)  │   ↓                               │   ↓       │
+   │            │ llm_client (Ollama)               │ document_ │
+   │ audit      │                                   │ processor │
+   └────────────┴───────────────────────────────────┴───────────┘
+        │ history · export_docx · experiments
+   ┌────┴─────────────┐                  ┌────────────────┐
+   │ SQLite (app.db)  │                  │ ChromaDB        │
+   │ users, documents,│                  │ copëzat +       │
+   │ chat_history,    │                  │ vektorët +      │
+   │ audit_logs,      │                  │ metadata e plotë│
+   │ experiment_results│                 └────────────────┘
+   └──────────────────┘
 ```
 
 ### Modulet
 | Moduli | Përgjegjësia |
 |--------|--------------|
-| `config.py` | Të gjithë parametrat: modele, prag refuzimi, k, madhësi copëze. |
-| `doku/db.py` | SQLite: skema + migrime + lidhje. |
-| `doku/auth.py` | Autentikim, hash bcrypt, role, ndryshim fjalëkalimi. |
-| `doku/ingestion.py` | Nxjerrje teksti (PyMuPDF), validim (anti-skanim), copëzim. |
-| `doku/embeddings.py` | Embeddings bge-m3 (Sentence Transformers), të normalizuar. |
-| `doku/vectorstore.py` | ChromaDB (kosinus), distancë→ngjashmëri. |
-| `doku/rag.py` | Pipeline RAG, porta e refuzimit, prompt i bazuar, përmbledhje. |
-| `doku/llm.py` | Klient Ollama lokal, zgjedhje modeli. |
-| `doku/documents.py` | Menaxhim dokumentesh (admin). |
-| `doku/export.py` | Eksport Word (.docx). |
-| `doku/experiment.py` | Krahasim RAG vs LLM pa dokumente. |
-| `doku/audit.py`, `doku/history.py` | Regjistër veprimesh dhe historik pyetjesh. |
-| `app.py` | UI Streamlit (shqip), me role. |
+| `config.py` | Parametrat: `OLLAMA_MODEL`, temperaturë 0.2, pragu i refuzimit, shtigjet, enum-et. |
+| `modules/database.py` | Skema SQLite (5 tabela) + lidhje + auto-krijim. |
+| `modules/auth.py` | bcrypt, role admin/punonjes, admin default, ndryshim i detyruar. |
+| `modules/audit.py` | Regjistri i veprimeve. |
+| `modules/document_processor.py` | PyMuPDF: nxjerrje, validim teksti (anti-skanim), copëzim. |
+| `modules/embeddings.py` | bge-m3 (Sentence Transformers), vektorë të normalizuar. |
+| `modules/vector_store.py` | ChromaDB; metadata e plotë e copëzës; filtrim sipas aktiv/dokument. |
+| `modules/documents.py` | Menaxhim dokumentesh: ngarko/edito/status/fshi/riindekso(/të gjitha). |
+| `modules/rag_pipeline.py` | Marrje → portë refuzimi → prompt i bazuar → LLM → citime; përmbledhje. |
+| `modules/llm_client.py` | Klient Ollama (error i qartë në shqip nëse jo aktiv). |
+| `modules/history.py` | Ruajtja e `chat_history`. |
+| `modules/export_docx.py` | Eksport Word (përgjigje + përmbledhje) te `data/exports/`. |
+| `modules/experiments.py` | Harness RAG vs pa-RAG + eksport CSV. |
+| `modules/ui.py` | Mbrojtëset e sesionit (`current_user`, `require_admin`). |
+| `pages/1..8` | Faqet Streamlit (multipage), të filtruara sipas rolit. |
 
 ## 3. Rrjedha e të dhënave
 
 ### 3.1 Indeksimi (admin ngarkon PDF)
-1. **Ruajtja** e PDF-së në `data/documents/`.
-2. **Nxjerrja** e tekstit faqe-për-faqe me PyMuPDF.
-3. **Validimi**: nëse teksti i lexueshëm < 100 karaktere → refuzohet (ndoshta skanim;
-   versioni bazë nuk ka OCR).
-4. **Copëzimi** në dritare me mbivendosje (800 / 120 karaktere), ruhet faqja burimore.
-5. **Embedding** me bge-m3 (vektorë të normalizuar).
-6. **Indeksimi** në ChromaDB; metadata e dokumentit në SQLite.
+1. Ruajtja e PDF-së në `data/uploads/` (emër i sigurt).
+2. Nxjerrja e tekstit faqe-për-faqe (PyMuPDF).
+3. Validimi: tekst < 100 karaktere → refuzohet (skanim; pa OCR).
+4. Copëzimi (800/120 karaktere) me numrin e faqes.
+5. Embedding me bge-m3; indeksimi në ChromaDB me metadata të plotë.
+6. Metadata e dokumentit (tip, institucion, vit, përshkrim, status) në SQLite.
 
 ### 3.2 Pyetja (anti-halucinim)
 ```
-pyetje → embedding → marrje top-k (ChromaDB)
+pyetje → embedding → marrje top-k (vetëm dokumentet active ose një i zgjedhur)
         → PORTA E REFUZIMIT: nëse ngjashmëria më e lartë < MIN_SIMILARITY
-              → "Nuk u gjet në dokumente."  (LLM-ja nuk thirret kurrë)
+              → mesazhi i refuzimit (LLM-ja nuk thirret kurrë)
         → filtrim i kontekstit te copëzat përkatëse
-        → prompt i bazuar me burime të numëruara
-        → LLM lokal (Ollama)
-        → përgjigje me citime [n]
+        → prompt i bazuar → LLM lokal → përgjigje me citime [filename, tip, institucion, faqe]
+        → shënim ligjor nëse dokumenti është normativ (Ligj/VKM/Rregullore/Udhëzim)
 ```
 
 ## 4. Mekanizmi anti-halucinim
-- **Porta e refuzimit ekzekutohet PARA modelit.** Nëse asnjë copëz nuk e kalon
-  pragun `MIN_SIMILARITY` (0.45), sistemi refuzon pa e thirrur fare LLM-në — kështu
-  fabrikimi bëhet strukturalisht i pamundur për pyetje jashtë korpusit.
-- **Prompt i kufizuar**: modeli udhëzohet të përgjigjet vetëm nga burimet, të citojë
-  me `[n]`, dhe të kthejë fjalinë e refuzimit nëse informacioni mungon.
-- **Temperaturë 0** për përgjigje deterministike.
-- **Filtrim konteksti**: kur filtri është "të gjitha dokumentet", copëzat jashtë teme
-  hiqen nga konteksti që përgjigja të mos hollohet.
+- **Porta e refuzimit ekzekutohet PARA modelit** → fabrikimi strukturalisht i pamundur
+  për pyetje jashtë korpusit. Mesazhi i saktë: *"Nuk ka informacion të mjaftueshëm…"*.
+- Prompt i kufizuar te konteksti; temperaturë 0.2; filtrim konteksti te copëzat përkatëse.
 
 ## 5. Siguria dhe RBAC
-- Fjalëkalimet ruhen me **bcrypt** (asnjëherë në tekst të thjeshtë).
-- Dy role: **admin** (menaxhon korpusin, përdoruesit, audit) dhe **punonjës**
-  (vetëm lexim: pyetje, përmbledhje, eksperimente, historik).
-- Kontrolli i rolit bëhet **në kod** (`require_admin`), jo vetëm duke fshehur UI-në.
-- **Ndryshim i detyruar i fjalëkalimit** në hyrjen e parë të admin-it.
-- Çdo hyrje dhe veprim i privilegjuar shkruhet në regjistrin e auditimit.
+- Fjalëkalime me **bcrypt** (asnjëherë plain-text); admin default me ndryshim të detyruar.
+- Dy role: **admin** (menaxhon korpusin, përdoruesit, audit, eksperimente) dhe **punonjes**
+  (vetëm lexim). Kontroll në kod (`require_admin`), jo vetëm fshehje UI.
+- Audit log për çdo veprim të rëndësishëm; emra file të sigurt në upload/eksport.
 
-## 6. Vlerësimi
-Suita `tests/grounding_test.py` (10 pyetje + 1 gjenerim) mbi korpusin shembull:
+## 6. Vlerësimi (kapitulli i Rezultateve)
+Moduli `experiments.py` + faqja *Eksperimente* ekzekuton `tests/sample_questions.csv` me dhe
+pa RAG, dhe mat për çdo pyetje: kohën pa/me RAG, numrin e copëzave, praninë e citimeve,
+vlerësimin manual të saktësisë (1–5) dhe halucinacionin (Po/Jo) për të dyja, plus shënime.
+Rezultatet ruhen te `experiment_results` dhe eksportohen në **CSV** për tabelën krahasuese.
 
-| Lloji i pyetjes | Ngjashmëria | Rezultati |
-|-----------------|-------------|-----------|
-| Brenda korpusit (8) | 0.586 – 0.761 | ✅ dokumenti i saktë u mor |
-| Jashtë korpusit (2) | 0.242, 0.330 | ✅ u refuzua |
-| Gjenerim me citime (1) | — | ✅ përgjigje e bazuar dhe e cituar |
-
-**Rezultati: 11/11.** Ndarja e qartë mes përkatëses (≥0.586) dhe jo-përkatëses
-(≤0.330) e vendos pragun 0.45 në një zonë të sigurt. Kjo konfirmon bge-m3 si zgjedhjen
-e duhur për shqipen dhe vlefshmërinë e portës së refuzimit.
-
-`tests/smoke_test.py` validon logjikën bazë (copëzim, validim teksti, hash fjalëkalimi)
-pa varësi nga Ollama.
+Gjetje paraprake (korpus shembull, bge-m3): pyetjet brenda korpusit shënojnë ngjashmëri
+0.58–0.76 dhe marrin dokumentin e saktë; pyetjet jashtë korpusit ≤0.35 dhe refuzohen —
+ndarje e qartë që e bën pragun 0.45 të sigurt.
 
 ## 7. Vendimet kryesore të dizajnit
-- **bge-m3** (jo modele njëgjuhëshe angleze): mbështetje e fortë shumëgjuhëshe përfshirë
-  shqipen; e konfirmuar me spike + teste.
-- **ChromaDB + SQLite** (jo një bazë e vetme): vektorët në Chroma, të dhënat relacionale
-  (përdorues, audit, metadata) në SQLite — secila mjet për qëllimin e vet, pa server.
-- **Ollama lokal** (jo API cloud): kërkesë thelbësore privatësie/lokaliteti.
-- **bcrypt drejtpërdrejt** (jo passlib): passlib është i pamirëmbajtur dhe prishet me
-  bcrypt ≥ 5.
-- **Streamlit** (jo FastAPI/React): UI e shpejtë, e demonstrueshme, akademike.
+- **bge-m3** për shqipen (shumëgjuhësh i fortë), i konfirmuar me teste.
+- **ChromaDB + SQLite** të ndara (vektorë vs të dhëna relacionale), pa server.
+- **Ollama lokal**: parazgjedhje `qwen2.5:3b` (i sigurt për 16GB); `gemma2:9b` jep cilësi
+  më të lartë në shqip por kërkon më shumë RAM (mund të dalë OOM).
+- **bcrypt drejtpërdrejt** (passlib i pamirëmbajtur me bcrypt ≥ 5).
+- **Streamlit multipage** me `st.navigation` për navigim sipas rolit.
 
 ## 8. Kufizimet dhe puna e ardhshme
-- **Pa OCR**: dokumentet e skanuara nuk mbështeten (zbulohen dhe refuzohen).
-- **Modele 3B**: përgjigjet janë të sakta por të përmbledhura; modele më të mëdha do të
-  jepnin përgjigje më të pasura (me kosto RAM/GPU).
-- **Pragu** mund të rikalibohet mbi dokumente reale (vlera 0.45 është pikënisje e mirë).
-- E ardhmja: rirenditje (re-ranking), OCR opsional, vlerësim me gjykatës AI dytësor.
+Pa OCR; cilësia varet nga modeli lokal dhe RAM-i; pragu rikalibrohet mbi korpus real.
+E ardhmja: OCR opsional, rirenditje (re-ranking), gjykatës AI dytësor, kontroll versionesh.
 
 ## 9. Mjedisi
-Windows 11 · Python 3.13 · ~16GB RAM · RTX 3050 (opsionale) · Ollama lokal.
+Windows 11 · Python 3.13 · 16GB RAM · RTX 3050 4GB · Ollama lokal.

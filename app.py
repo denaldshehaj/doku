@@ -91,10 +91,13 @@ def sidebar(user):
 def main():
     user = current_user()
     if not user:
-        login_screen()
+        # Hidden navigation so no page menu shows on the login screen, and the
+        # pages cannot be opened until the user has logged in.
+        st.navigation([st.Page(login_screen, title="Hyr")], position="hidden").run()
         return
     if auth.needs_password_change(user["username"]):
-        change_password_screen()
+        st.navigation([st.Page(change_password_screen, title="Ndrysho fjalëkalimin")],
+                      position="hidden").run()
         return
 
     employee_pages = [
