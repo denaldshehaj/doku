@@ -37,6 +37,26 @@ DEFAULT_ADMIN_PASSWORD = "***REMOVED-CREDENTIAL***"
 
 # --- Domain enums ---
 DOCUMENT_TYPES = ["Ligj", "VKM", "Strategji", "Rregullore", "Udhëzim", "Raport", "Tjetër"]
+UPLOAD_TYPES = ["pdf", "docx"]            # formate të lejuara për ngarkim
+INSTITUTIONS = [
+    "Kuvendi i Shqipërisë",
+    "Këshilli i Ministrave",
+    "Ministria e Financave",
+    "Ministria e Ekonomisë",
+    "Ministria e Mbrojtjes",
+    "Ministria e Brendshme",
+    "Ministria e Drejtësisë",
+    "Ministria e Arsimit dhe Sportit",
+    "Ministria e Shëndetësisë",
+    "Ministria e Infrastrukturës",
+    "Ministria e Bujqësisë",
+    "Ministria e Turizmit dhe Mjedisit",
+    "AKSHI",
+    "Agjencia e Prokurimit Publik",
+    "Banka e Shqipërisë",
+    "INSTAT",
+    "Tjetër",
+]
 NORMATIVE_TYPES = {"Ligj", "VKM", "Rregullore", "Udhëzim"}  # trigger legal disclaimer
 STATUS_ACTIVE = "active"
 STATUS_INACTIVE = "inactive"

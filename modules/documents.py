@@ -12,12 +12,12 @@ from modules import database as db, document_processor as dp, vector_store as vs
 
 
 def safe_filename(name: str) -> str:
-    """Produce a filesystem-safe filename (avoid unsafe upload names)."""
-    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
-    name = re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("._") or "dokument"
-    if not name.lower().endswith(".pdf"):
-        name += ".pdf"
-    return name
+    """Produce a filesystem-safe filename, preserving a .pdf/.docx extension."""
+    parts = (name or "").rsplit(".", 1)
+    ext = "." + parts[1].lower() if len(parts) == 2 and parts[1].lower() in ("pdf", "docx") else ".pdf"
+    stem = unicodedata.normalize("NFKD", parts[0]).encode("ascii", "ignore").decode()
+    stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", stem).strip("._") or "dokument"
+    return stem + ext
 
 
 def list_documents(active_only=False, doc_type=None, year=None, institution=None,
@@ -79,7 +79,7 @@ def add_document(src_path, original_filename, title="", institution="",
     if Path(src_path) != dest:
         shutil.copyfile(src_path, dest)
 
-    chunks, n_pages = dp.process_pdf(dest)  # may raise NoExtractableTextError
+    chunks, n_pages = dp.process_document(dest)  # may raise NoExtractableTextError
 
     with db.get_conn() as conn:
         cur = conn.execute(
@@ -141,8 +141,8 @@ def reindex_document(doc_id: int) -> int:
         raise ValueError("Dokumenti nuk u gjet.")
     pdf = Path(doc["stored_path"])
     if not pdf.exists():
-        raise ValueError("Skedari PDF mungon në disk.")
-    chunks, n_pages = dp.process_pdf(pdf)
+        raise ValueError("Skedari mungon në disk.")
+    chunks, n_pages = dp.process_document(pdf)
     vs.delete_document(doc_id)
     n = vs.add_document(doc_id, _chunk_meta(doc["filename"], doc["title"],
                         doc["institution"], doc["document_type"], doc["year"],

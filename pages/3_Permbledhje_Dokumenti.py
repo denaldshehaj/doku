@@ -27,7 +27,7 @@ if st.button("Gjenero përmbledhjen", type="primary"):
         st.stop()
     try:
         with st.spinner("Duke përmbledhur..."):
-            text = "\n".join(dp.extract_pages(pdf))
+            text = dp.extract_text(pdf)
             summary = rag.summarize(text, fmt=fmt)
     except llm_client.OllamaUnavailableError as e:
         st.error(str(e))

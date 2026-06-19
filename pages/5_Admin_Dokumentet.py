@@ -1,6 +1,7 @@
 """Admin page: upload, edit metadata, activate/deactivate, delete, reindex one
 or the whole corpus."""
 import tempfile
+from datetime import date
 from pathlib import Path
 
 import streamlit as st
@@ -13,13 +14,16 @@ st.subheader("📄 Menaxhimi i Dokumenteve")
 
 # --- Ngarkim ---
 with st.expander("➕ Ngarko dokument të ri", expanded=False):
-    uploaded = st.file_uploader("Skedar PDF", type=["pdf"])
+    uploaded = st.file_uploader("Skedar (PDF ose Word)", type=config.UPLOAD_TYPES)
     c1, c2 = st.columns(2)
     title = c1.text_input("Titulli")
-    institution = c2.text_input("Institucioni burimor")
+    institution = c2.selectbox("Institucioni burimor", config.INSTITUTIONS)
     c3, c4 = st.columns(2)
     document_type = c3.selectbox("Tipi i dokumentit", config.DOCUMENT_TYPES)
-    year = c4.number_input("Viti", min_value=0, max_value=2100, value=0, step=1)
+    year_date = c4.date_input("Viti", value=date(date.today().year, 1, 1),
+                              min_value=date(1990, 1, 1), max_value=date(2100, 12, 31),
+                              format="YYYY-MM-DD")
+    year = year_date.year
     description = st.text_area("Përshkrim i shkurtër", height=70)
     if st.button("Ngarko dhe indekso", type="primary") and uploaded is not None:
         tmp = Path(tempfile.gettempdir()) / uploaded.name
@@ -85,11 +89,20 @@ for d in docs:
             st.rerun()
         with c4.popover("✏️ Metadata"):
             nt = st.text_input("Titulli", value=d["title"] or "", key=f"t{d['id']}")
-            ni = st.text_input("Institucioni", value=d["institution"] or "", key=f"i{d['id']}")
+            inst_opts = (config.INSTITUTIONS if (not d["institution"] or
+                         d["institution"] in config.INSTITUTIONS)
+                         else [d["institution"]] + config.INSTITUTIONS)
+            ni = st.selectbox("Institucioni", inst_opts, key=f"i{d['id']}",
+                              index=inst_opts.index(d["institution"])
+                              if d["institution"] in inst_opts else 0)
             ntype = st.selectbox("Tipi", config.DOCUMENT_TYPES, key=f"ty{d['id']}",
                                  index=config.DOCUMENT_TYPES.index(d["document_type"])
                                  if d["document_type"] in config.DOCUMENT_TYPES else 0)
-            ny = st.number_input("Viti", value=int(d["year"] or 0), key=f"y{d['id']}")
+            cur_year = int(d["year"]) if d["year"] else date.today().year
+            ny_date = st.date_input("Viti", value=date(cur_year, 1, 1),
+                                    min_value=date(1990, 1, 1), max_value=date(2100, 12, 31),
+                                    format="YYYY-MM-DD", key=f"y{d['id']}")
+            ny = ny_date.year
             nd = st.text_area("Përshkrim", value=d["description"] or "", key=f"d{d['id']}")
             if st.button("Ruaj", key=f"save{d['id']}"):
                 documents.update_metadata(d["id"], title=nt, institution=ni,
@@ -98,3 +111,27 @@ for d in docs:
                 audit.log(user["id"], user["username"], "update_document_metadata",
                           d["filename"])
                 st.success("U ruajt."); st.rerun()
+
+        with st.expander("👁️ Parapamje / Shkarko"):
+            path = Path(d["stored_path"]) if d["stored_path"] else None
+            if not path or not path.exists():
+                st.warning("Skedari mungon në disk.")
+            else:
+                is_pdf = d["filename"].lower().endswith(".pdf")
+                mime = ("application/pdf" if is_pdf else
+                        "application/vnd.openxmlformats-officedocument."
+                        "wordprocessingml.document")
+                with open(path, "rb") as fh:
+                    st.download_button("⬇️ Shkarko dokumentin", fh.read(),
+                                       file_name=d["filename"], mime=mime,
+                                       key=f"dl{d['id']}")
+                if is_pdf:
+                    imgs = dp.render_pdf_images(path, max_pages=10)
+                    for img in imgs:
+                        st.image(img, use_container_width=True)
+                    if d["num_pages"] > 10:
+                        st.caption("Parapamje e kufizuar te 10 faqet e para. "
+                                   "Shkarko skedarin për pamjen e plotë.")
+                else:
+                    st.caption("Word — parapamje teksti:")
+                    st.text(dp.extract_text(path)[:4000])
