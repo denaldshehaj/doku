@@ -51,7 +51,7 @@ M0 spike) · Ollama local LLM (`qwen2.5:3b` / `llama3.2:3b`) · python-docx (Wor
 - Setup: `py -3.13 -m venv .venv` → `pip install -r requirements.txt` → `python seed.py`
   → `python scripts/make_sample_corpus.py`
 - Model: `ollama pull qwen2.5:3b` (Ollama service must be up on :11434)
-- App: `.venv\Scripts\streamlit run app.py`  (admin/***REMOVED-CREDENTIAL***, punonjes/punonjes123)
+- App: `.venv\Scripts\streamlit run app.py`  (no default creds — register in-app; first account = admin)
 - Tests: `python tests\smoke_test.py`, `python tests\grounding_test.py`
 
 See **SPEC.md** for architecture, milestones, and per-module Definition of Done.

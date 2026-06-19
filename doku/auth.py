@@ -1,6 +1,8 @@
 """Authentication & role management. Passwords are hashed with bcrypt directly
 (passlib is unmaintained and breaks with bcrypt>=5); plaintext is never stored
 (CLAUDE.md rule 5)."""
+import re
+
 import bcrypt
 
 from doku import db
@@ -8,6 +10,9 @@ from doku import db
 ADMIN = "admin"
 EMPLOYEE = "employee"
 ROLES = (ADMIN, EMPLOYEE)
+
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_.]{3,32}$")
+MIN_PASSWORD_LEN = 6
 
 
 def hash_password(password: str) -> str:
@@ -86,3 +91,33 @@ def list_users():
 def user_count() -> int:
     with db.get_conn() as conn:
         return conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
+
+
+def has_admin() -> bool:
+    with db.get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM users WHERE role = ? LIMIT 1", (ADMIN,)
+        ).fetchone()
+    return row is not None
+
+
+def register(username: str, password: str, confirm: str) -> str:
+    """Self-registration with validation. The first account (when no admin exists)
+    becomes admin to bootstrap the system; later accounts are employees.
+    Returns the assigned role. Raises ValueError on invalid input."""
+    username = (username or "").strip()
+    if not USERNAME_RE.match(username):
+        raise ValueError(
+            "Përdoruesi duhet të jetë 3–32 karaktere (shkronja, numra, '_' ose '.')."
+        )
+    if get_user(username) is not None:
+        raise ValueError("Ky përdorues ekziston tashmë. Zgjidh një emër tjetër.")
+    if not password or len(password) < MIN_PASSWORD_LEN:
+        raise ValueError(
+            f"Fjalëkalimi duhet të ketë të paktën {MIN_PASSWORD_LEN} karaktere."
+        )
+    if password != confirm:
+        raise ValueError("Fjalëkalimet nuk përputhen.")
+    role = ADMIN if not has_admin() else EMPLOYEE
+    create_user(username, password, role, must_change=False)
+    return role

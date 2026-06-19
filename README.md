@@ -34,7 +34,7 @@ py -3.13 -m venv .venv
 # Modeli lokal (në një terminal të ri, që Ollama të jetë në PATH):
 ollama pull qwen2.5:3b
 
-# Inicializo bazën, përdoruesit dhe korpusin shembull:
+# Inicializo bazën dhe (opsionale) korpusin shembull:
 .\.venv\Scripts\python.exe seed.py
 .\.venv\Scripts\python.exe scripts\make_sample_corpus.py
 ```
@@ -44,14 +44,10 @@ ollama pull qwen2.5:3b
 .\.venv\Scripts\streamlit run app.py
 ```
 
-### Kredencialet e parazgjedhura
-| Përdoruesi | Fjalëkalimi  | Roli     |
-|------------|--------------|----------|
-| `admin`    | `***REMOVED-CREDENTIAL***`   | admin    |
-| `punonjes` | `punonjes123`| punonjës |
-
-> ⚠️ Në hyrjen e parë, **admin-i detyrohet të vendosë një fjalëkalim të ri**.
-> Përdoruesit e rinj të krijuar nga admin-i e ndryshojnë fjalëkalimin në hyrjen e parë.
+### Llogaria e parë
+Nuk ka kredenciale të parazgjedhura. Te aplikacioni, përdor skedën **“Regjistrohu”**:
+**llogaria e parë e regjistruar bëhet administrator**, ndërsa regjistrimet e mëvonshme
+bëhen **punonjës**. Administratori mund të krijojë përdorues të tjerë nga paneli.
 
 ## Testimi
 ```powershell
