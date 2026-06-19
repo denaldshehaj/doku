@@ -1,1 +1,9 @@
 .venv/
+__pycache__/
+*.pyc
+*.log
+
+# Local data artifacts (corpus, vectors, db) — not committed
+data/documents/
+data/chroma/
+data/doku.db
