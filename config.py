@@ -11,9 +11,10 @@ DB_PATH = DATA_DIR / "app.db"             # sqlite database
 
 # --- Models (local only, no cloud) ---
 EMBEDDING_MODEL = "BAAI/bge-m3"           # multilingual incl. Albanian
-OLLAMA_MODEL = "qwen2.5:3b"               # local LLM via Ollama; i sigurt për 16GB RAM.
+OLLAMA_MODEL = "gemma2:9b"                # local LLM via Ollama; shqipe më e mirë.
 # Shënim: gemma2:9b jep shqipe më të mirë por kërkon ~6GB RAM të lirë (mund të dalë
-# "failed to allocate buffer"). Zgjidhe nga dropdown-i kur ke RAM të mjaftueshëm.
+# "failed to allocate buffer" në 16GB RAM kur bge-m3 është ngarkuar). Nëse del OOM,
+# zgjidh `qwen2.5:3b` nga dropdown-i në sidebar — më i sigurt për RAM të kufizuar.
 OLLAMA_HOST = "http://localhost:11434"
 LLM_TEMPERATURE = 0.2                      # low temperature for grounded answers
 

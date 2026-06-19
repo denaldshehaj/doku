@@ -16,6 +16,16 @@ auth.ensure_default_admin()
 
 ROLE_LABELS = {auth.ADMIN: "Administrator", auth.PUNONJES: "Punonjës"}
 
+# Fsheh plotësisht panelin anësor (dhe shigjetën e hapjes) derisa login-i të
+# përfundojë me sukses. `position="hidden"` fsheh vetëm menynë e faqeve, jo vetë
+# shtyllën bosh — kjo CSS e heq tërësisht.
+_HIDE_SIDEBAR_CSS = """
+<style>
+[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"] { display: none !important; }
+</style>
+"""
+
 
 def current_user():
     return st.session_state.get("user")
@@ -93,9 +103,13 @@ def main():
     if not user:
         # Hidden navigation so no page menu shows on the login screen, and the
         # pages cannot be opened until the user has logged in.
+        st.markdown(_HIDE_SIDEBAR_CSS, unsafe_allow_html=True)
         st.navigation([st.Page(login_screen, title="Hyr")], position="hidden").run()
         return
     if auth.needs_password_change(user["username"]):
+        # Login-i nuk konsiderohet i përfunduar derisa fjalëkalimi i parazgjedhur
+        # të ndryshohet — mbaje panelin anësor të fshehur edhe këtu.
+        st.markdown(_HIDE_SIDEBAR_CSS, unsafe_allow_html=True)
         st.navigation([st.Page(change_password_screen, title="Ndrysho fjalëkalimin")],
                       position="hidden").run()
         return

@@ -2,6 +2,10 @@
 __pycache__/
 *.pyc
 *.log
+*.pid
+
+# Local-only tooling (e.g. cloudflared binary for the tunnel) — not committed
+tools/
 
 # Local data artifacts (corpus, vectors, db, exports) — not committed
 data/uploads/
