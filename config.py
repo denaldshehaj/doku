@@ -23,7 +23,9 @@ CHUNK_OVERLAP = 120
 RETRIEVAL_K = 5                            # top-k chunks per query
 
 # --- Grounding / refusal gate (never hallucinate) ---
-MIN_SIMILARITY = 0.45                      # below this, the system refuses
+MIN_SIMILARITY = 0.38                      # below this, the system refuses.
+# 0.38 lejon pyetje pa diakritikë (që shënojnë ~0.40) ndërsa pyetjet jashtë-korpusi
+# (≤0.35) refuzohen. Me diakritikë të saktë pyetjet brenda korpusit shënojnë ~0.70.
 REFUSAL_MESSAGE = (
     "Nuk ka informacion të mjaftueshëm në dokumentet e ngarkuara "
     "për t'iu përgjigjur kësaj pyetjeje."
