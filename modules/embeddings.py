@@ -1,9 +1,5 @@
 """Embedding model wrapper (bge-m3 via Sentence Transformers). Local-only.
-
-We compute embeddings ourselves and hand vectors directly to ChromaDB, so we
-never depend on Chroma's embedding-function interface. Embeddings are L2-
-normalized, so cosine similarity == dot product.
-"""
+Embeddings are L2-normalized, so cosine similarity == dot product."""
 import config
 
 _model = None
@@ -18,8 +14,7 @@ def get_model():
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
-    model = get_model()
-    vecs = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+    vecs = get_model().encode(texts, normalize_embeddings=True, show_progress_bar=False)
     return vecs.tolist()
 
 

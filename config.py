@@ -1,31 +1,42 @@
-"""Central configuration for DOKU. All tunables live here (CLAUDE.md rule)."""
+"""Central configuration for DOKU. All tunables live here."""
 from pathlib import Path
 
 # --- Paths ---
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
-DOCUMENTS_DIR = DATA_DIR / "documents"      # uploaded source PDFs
-CHROMA_DIR = DATA_DIR / "chroma"            # persistent vector store
-DB_PATH = DATA_DIR / "doku.db"              # sqlite: users, logs, history, experiments
+UPLOADS_DIR = DATA_DIR / "uploads"        # source PDFs uploaded by admin
+EXPORTS_DIR = DATA_DIR / "exports"        # generated .docx files
+CHROMA_DIR = DATA_DIR / "chroma_db"       # persistent vector store
+DB_PATH = DATA_DIR / "app.db"             # sqlite database
 
-# --- Models (local only) ---
-EMBEDDING_MODEL = "BAAI/bge-m3"             # multilingual, incl. Albanian; pending M0 spike
-LLM_MODEL = "qwen2.5:3b"                    # via Ollama; alt: llama3.2:3b
+# --- Models (local only, no cloud) ---
+EMBEDDING_MODEL = "BAAI/bge-m3"           # multilingual incl. Albanian
+OLLAMA_MODEL = "gemma2:9b"                # local LLM via Ollama; alt: qwen2.5:3b (faster)
 OLLAMA_HOST = "http://localhost:11434"
+LLM_TEMPERATURE = 0.2                      # low temperature for grounded answers
 
 # --- Retrieval / chunking ---
-CHUNK_SIZE = 800                            # characters per chunk (approx)
+CHUNK_SIZE = 800                           # characters per chunk (approx)
 CHUNK_OVERLAP = 120
-RETRIEVAL_K = 5                             # top-k chunks per query
+RETRIEVAL_K = 5                            # top-k chunks per query
 
-# --- Grounding / refusal gate (the "never hallucinate" contract) ---
-# bge-m3 cosine similarity in [0,1]; below this, the system refuses.
-# Calibrated during M0/M1 against the Albanian test set.
-MIN_SIMILARITY = 0.45
-REFUSAL_MESSAGE = "Nuk u gjet në dokumente."
+# --- Grounding / refusal gate (never hallucinate) ---
+MIN_SIMILARITY = 0.45                      # below this, the system refuses
+REFUSAL_MESSAGE = (
+    "Nuk ka informacion të mjaftueshëm në dokumentet e ngarkuara "
+    "për t'iu përgjigjur kësaj pyetjeje."
+)
 
-# --- Language ---
-UI_LANGUAGE = "sq"  # Albanian
+# --- Default administrator (auto-created if no admin exists) ---
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "***REMOVED-CREDENTIAL***"
 
-for _d in (DATA_DIR, DOCUMENTS_DIR, CHROMA_DIR):
+# --- Domain enums ---
+DOCUMENT_TYPES = ["Ligj", "VKM", "Strategji", "Rregullore", "Udhëzim", "Raport", "Tjetër"]
+NORMATIVE_TYPES = {"Ligj", "VKM", "Rregullore", "Udhëzim"}  # trigger legal disclaimer
+STATUS_ACTIVE = "active"
+STATUS_INACTIVE = "inactive"
+
+# Ensure required folders exist (auto-create).
+for _d in (DATA_DIR, UPLOADS_DIR, EXPORTS_DIR, CHROMA_DIR):
     _d.mkdir(parents=True, exist_ok=True)

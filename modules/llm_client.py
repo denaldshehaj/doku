@@ -1,9 +1,13 @@
-"""Local LLM client (Ollama). No cloud calls (CLAUDE.md rule 1). Temperature
-defaults to 0 for deterministic, grounded answers."""
+"""Local LLM client (Ollama). No cloud calls. If Ollama is not running, a clear
+Albanian error is raised so the UI can show it."""
 import config
 
 _client = None
 _active_model: str | None = None
+
+
+class OllamaUnavailableError(Exception):
+    """Ollama service is not reachable."""
 
 
 def _get_client():
@@ -15,7 +19,7 @@ def _get_client():
 
 
 def get_active_model() -> str:
-    return _active_model or config.LLM_MODEL
+    return _active_model or config.OLLAMA_MODEL
 
 
 def set_active_model(model: str) -> None:
@@ -24,8 +28,6 @@ def set_active_model(model: str) -> None:
 
 
 def list_models() -> list[str]:
-    """Names of models available locally in Ollama (best-effort, robust to client
-    version differences)."""
     try:
         data = _get_client().list()
     except Exception:
@@ -51,14 +53,22 @@ def is_available() -> bool:
         return False
 
 
-def generate(prompt: str, system: str | None = None, temperature: float = 0.0) -> str:
+def generate(prompt: str, system: str | None = None,
+             temperature: float | None = None) -> str:
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
-    resp = _get_client().chat(
-        model=get_active_model(),
-        messages=messages,
-        options={"temperature": temperature},
-    )
+    try:
+        resp = _get_client().chat(
+            model=get_active_model(), messages=messages,
+            options={"temperature": config.LLM_TEMPERATURE if temperature is None
+                     else temperature},
+        )
+    except Exception as exc:
+        raise OllamaUnavailableError(
+            "Shërbimi i modelit lokal (Ollama) nuk është aktiv ose modeli mungon. "
+            "Sigurohu që Ollama po ekzekuton dhe modeli është shkarkuar "
+            f"(`ollama pull {get_active_model()}`). Detaje: {exc}"
+        )
     return resp["message"]["content"].strip()

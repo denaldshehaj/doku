@@ -3,7 +3,13 @@ __pycache__/
 *.pyc
 *.log
 
-# Local data artifacts (corpus, vectors, db) — not committed
+# Local data artifacts (corpus, vectors, db, exports) — not committed
+data/uploads/
+data/exports/
+data/chroma_db/
+data/app.db
+
+# Legacy (pre-restructure) artifacts
 data/documents/
 data/chroma/
 data/doku.db
