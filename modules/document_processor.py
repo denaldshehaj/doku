@@ -1,12 +1,18 @@
 """Document processing: extract text from PDF (PyMuPDF, per page) or Word/.docx
 (python-docx), validate that the file actually has selectable text (no OCR in the
 base version), and split into overlapping chunks carrying the source page number."""
+import re
 from dataclasses import dataclass
 
 import fitz  # PyMuPDF
 from docx import Document as DocxDocument
 
 import config
+
+# Albanian laws are organised into articles ("Neni 1", "Neni 2", …), each on its
+# own line. Splitting on these boundaries keeps every chunk a coherent article,
+# which makes retrieval land on the right provision and citations cleaner.
+_ARTICLE_RE = re.compile(r"(?m)(?=^[ \t]*Neni\s+\d+\b)")
 
 
 @dataclass
@@ -72,11 +78,8 @@ def validate_has_text(pages: list[str], min_chars: int = 100) -> None:
         )
 
 
-def chunk_text(text: str, size: int, overlap: int) -> list[str]:
+def _window_chunks(text: str, size: int, overlap: int) -> list[str]:
     """Character-window chunking with overlap, breaking near whitespace."""
-    text = text.strip()
-    if not text:
-        return []
     chunks, start, n = [], 0, len(text)
     while start < n:
         end = min(start + size, n)
@@ -90,6 +93,25 @@ def chunk_text(text: str, size: int, overlap: int) -> list[str]:
         if end >= n:
             break
         start = max(end - overlap, start + 1)
+    return chunks
+
+
+def chunk_text(text: str, size: int, overlap: int) -> list[str]:
+    """Article-aware chunking: split Albanian legal text on "Neni N" headers so
+    each chunk is a coherent article; long articles (and non-article text) fall
+    back to an overlapping sliding window."""
+    text = text.strip()
+    if not text:
+        return []
+    segments = [s.strip() for s in _ARTICLE_RE.split(text) if s.strip()]
+    if len(segments) <= 1:
+        return _window_chunks(text, size, overlap)
+    chunks = []
+    for seg in segments:
+        if len(seg) <= size:
+            chunks.append(seg)
+        else:
+            chunks.extend(_window_chunks(seg, size, overlap))
     return chunks
 
 
