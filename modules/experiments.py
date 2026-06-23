@@ -41,6 +41,18 @@ def run_batch(questions: list[str]) -> list[int]:
     return [run_one(q) for q in questions if q.strip()]
 
 
+def avg_run_seconds(default: float = 90.0) -> float:
+    """Average wall-clock seconds a single question takes (no-RAG + RAG), from
+    past runs. Used to drive the UI progress estimate; falls back to `default`
+    when there is no history yet."""
+    with db.get_conn() as conn:
+        row = conn.execute(
+            "SELECT AVG(COALESCE(time_without_rag,0)+COALESCE(time_with_rag,0)) AS a "
+            "FROM experiment_results WHERE time_with_rag IS NOT NULL"
+        ).fetchone()
+    return float(row["a"]) if row and row["a"] else default
+
+
 def list_results(limit: int = 500):
     with db.get_conn() as conn:
         return conn.execute(
