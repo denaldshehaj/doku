@@ -7,7 +7,6 @@ import streamlit as st
 from modules import audit, auth, ui
 
 PER_PAGE = 10
-LABEL_TO_ROLE = {v: k for k, v in ui.ROLE_LABELS.items()}
 
 user = ui.require_admin()
 st.subheader("👥 Menaxhimi i Përdoruesve")
@@ -56,57 +55,50 @@ rows = [{
     "Përdoruesi": u["username"],
     "Emri i plotë": u["full_name"] or "",
     "Roli": ui.ROLE_LABELS.get(u["role"], u["role"]),
-    "Aktiv": bool(u["is_active"]),
+    "Statusi": "Aktiv" if u["is_active"] else "Joaktiv",
     "Krijuar": (u["created_at"] or "")[:10],
 } for u in page_users]
 
-edited = st.data_editor(
-    rows, hide_index=True, use_container_width=True, key=f"users_editor_{page}",
-    column_config={
-        "Përdoruesi": st.column_config.TextColumn(disabled=True),
-        "Emri i plotë": st.column_config.TextColumn(width="medium"),
-        "Roli": st.column_config.SelectboxColumn(
-            options=list(ui.ROLE_LABELS.values()), required=True),
-        "Aktiv": st.column_config.CheckboxColumn(),
-        "Krijuar": st.column_config.TextColumn(disabled=True),
-    },
-)
+# Read-only paginated view; editing happens in the dropdown form below.
+st.dataframe(rows, hide_index=True, use_container_width=True)
+
+# --- Edit a user via dropdowns ---------------------------------------------
+st.divider()
+st.markdown("##### ✏️ Ndrysho një përdorues")
+by_name = {u["username"]: u for u in users}
+sel = st.selectbox("Përdoruesi", list(by_name.keys()), key="edit_user")
+cur = by_name[sel]
+is_self = sel == user["username"]
+
+e1, e2 = st.columns(2)
+new_name = e1.text_input("Emri i plotë", value=cur["full_name"] or "", key="edit_name")
+roles = [auth.PUNONJES, auth.ADMIN]
+new_role = e2.selectbox(
+    "Roli", roles, index=roles.index(cur["role"]),
+    format_func=lambda r: ui.ROLE_LABELS[r], key="edit_role",
+    disabled=is_self, help="Nuk mund të ndryshoni rolin tuaj." if is_self else None)
+statuses = [True, False]
+new_active = st.selectbox(
+    "Statusi", statuses, index=0 if cur["is_active"] else 1,
+    format_func=lambda a: "Aktiv" if a else "Joaktiv", key="edit_status",
+    disabled=is_self, help="Nuk mund të çaktivizoni veten." if is_self else None)
 
 if st.button("💾 Ruaj ndryshimet", type="primary"):
-    original = {u["username"]: u for u in page_users}
-    changed, skipped = 0, []
-    for row in edited:
-        uname = row["Përdoruesi"]
-        orig = original.get(uname)
-        if orig is None:
-            continue
-        is_self = uname == user["username"]
-        # Full name
-        new_name = (row["Emri i plotë"] or "").strip()
-        if new_name != (orig["full_name"] or ""):
-            auth.set_full_name(uname, new_name); changed += 1
-        # Role (cannot change your own — avoids self-lockout)
-        new_role = LABEL_TO_ROLE.get(row["Roli"], orig["role"])
-        if new_role != orig["role"]:
-            if is_self:
-                skipped.append(f"{uname}: rolin tuaj")
-            else:
-                auth.set_role(uname, new_role)
-                audit.log(user["id"], user["username"], "set_role",
-                          f"{uname} -> {new_role}"); changed += 1
-        # Active (cannot deactivate yourself)
-        new_active = bool(row["Aktiv"])
-        if new_active != bool(orig["is_active"]):
-            if is_self and not new_active:
-                skipped.append(f"{uname}: çaktivizimin e vetes")
-            else:
-                auth.set_active(uname, new_active); changed += 1
+    changed = 0
+    if (new_name or "").strip() != (cur["full_name"] or ""):
+        auth.set_full_name(sel, new_name); changed += 1
+    if not is_self and new_role != cur["role"]:
+        auth.set_role(sel, new_role)
+        audit.log(user["id"], user["username"], "set_role", f"{sel} -> {new_role}")
+        changed += 1
+    if not is_self and bool(new_active) != bool(cur["is_active"]):
+        auth.set_active(sel, new_active)
+        audit.log(user["id"], user["username"], "set_active", f"{sel}={new_active}")
+        changed += 1
     if changed:
-        st.success(f"U ruajtën {changed} ndryshime.")
-    if skipped:
-        st.warning("U anashkaluan: " + "; ".join(skipped))
-    if changed:
-        st.rerun()
+        st.success(f"U ruajtën ndryshimet për '{sel}'."); st.rerun()
+    else:
+        st.info("Nuk ka ndryshime për të ruajtur.")
 
 # --- Password management ----------------------------------------------------
 st.divider()
