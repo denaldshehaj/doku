@@ -27,8 +27,26 @@ _HIDE_SIDEBAR_CSS = """
 """
 
 
+def _user_dict(user) -> dict:
+    return {"id": user["id"], "username": user["username"], "role": user["role"],
+            "full_name": user["full_name"] or ""}
+
+
 def current_user():
-    return st.session_state.get("user")
+    user = st.session_state.get("user")
+    if user:
+        return user
+    # No in-memory session (e.g. after a browser refresh): try to restore from
+    # the persistent session token carried in the URL.
+    token = st.query_params.get("sid")
+    if token:
+        row = auth.resolve_session(token)
+        if row is not None:
+            st.session_state.user = _user_dict(row)
+            return st.session_state.user
+        # Token invalid/expired/revoked — drop it from the URL.
+        del st.query_params["sid"]
+    return None
 
 
 def login_screen():
@@ -49,10 +67,11 @@ def login_screen():
                     audit.log(None, username or "?", "login_failed")
                     st.error("Kredenciale të pasakta ose llogari joaktive.")
                 else:
-                    st.session_state.user = {
-                        "id": user["id"], "username": user["username"],
-                        "role": user["role"], "full_name": user["full_name"] or "",
-                    }
+                    st.session_state.user = _user_dict(user)
+                    # Persist a session token in the URL so a refresh keeps the
+                    # user logged in.
+                    st.query_params["sid"] = auth.create_session(
+                        user["id"], user["username"])
                     audit.log(user["id"], user["username"], "login_success")
                     st.rerun()
 
@@ -94,6 +113,8 @@ def sidebar(user):
         st.divider()
         if st.button("🚪 Dil", use_container_width=True):
             audit.log(user["id"], user["username"], "logout")
+            auth.delete_session(st.query_params.get("sid"))
+            st.query_params.clear()
             st.session_state.pop("user", None)
             st.rerun()
 

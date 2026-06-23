@@ -62,6 +62,14 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS sessions (
+    token      TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    username   TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS experiment_results (
     id                         INTEGER PRIMARY KEY AUTOINCREMENT,
     question                   TEXT NOT NULL,

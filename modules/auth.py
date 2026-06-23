@@ -132,3 +132,50 @@ def set_active(username: str, active: bool) -> None:
 def user_count() -> int:
     with db.get_conn() as conn:
         return conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
+
+
+# --- Persistent sessions (survive a browser refresh) -----------------------
+# Streamlit's session_state is lost on a full page reload, so we keep an opaque
+# token server-side in SQLite and carry it in the URL. On reload we look the
+# token up and rebuild the logged-in user from the (current) users row.
+SESSION_TTL_HOURS = 12
+
+
+def create_session(user_id: int, username: str, ttl_hours: int = SESSION_TTL_HOURS) -> str:
+    token = secrets.token_urlsafe(32)
+    with db.get_conn() as conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at < datetime('now')")
+        conn.execute(
+            "INSERT INTO sessions (token, user_id, username, expires_at) "
+            "VALUES (?, ?, ?, datetime('now', ?))",
+            (token, user_id, username, f"+{int(ttl_hours)} hours"),
+        )
+    return token
+
+
+def resolve_session(token: str):
+    """Return the active, non-expired user row for a session token, or None.
+    Sliding expiry: a valid token's lifetime is extended on each use."""
+    if not token:
+        return None
+    with db.get_conn() as conn:
+        row = conn.execute(
+            "SELECT username FROM sessions WHERE token = ? "
+            "AND expires_at >= datetime('now')", (token,)).fetchone()
+        if row is None:
+            return None
+        conn.execute(
+            "UPDATE sessions SET expires_at = datetime('now', ?) WHERE token = ?",
+            (f"+{SESSION_TTL_HOURS} hours", token))
+    user = get_user(row["username"])
+    if user is None or not user["is_active"]:
+        delete_session(token)
+        return None
+    return user
+
+
+def delete_session(token: str) -> None:
+    if not token:
+        return
+    with db.get_conn() as conn:
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
