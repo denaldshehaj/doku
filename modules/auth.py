@@ -108,6 +108,14 @@ def set_role(username: str, role: str) -> None:
         )
 
 
+def set_full_name(username: str, full_name: str) -> None:
+    with db.get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET full_name = ?, updated_at = datetime('now') "
+            "WHERE username = ?", ((full_name or "").strip(), username.strip()),
+        )
+
+
 def needs_password_change(username: str) -> bool:
     row = get_user(username)
     return bool(row) and bool(row["must_change_password"])
