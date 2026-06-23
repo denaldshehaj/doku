@@ -154,6 +154,23 @@ def reindex_document(doc_id: int) -> int:
     return n
 
 
+def purge_all_documents(delete_files: bool = False) -> int:
+    """Remove every document: SQLite rows + all vectors. Optionally delete the
+    stored working-copy files too. Returns the number of documents removed.
+    Used when rebuilding the knowledge base from the master corpus."""
+    docs = list_documents()
+    vs.reset_collection()
+    with db.get_conn() as conn:
+        conn.execute("DELETE FROM documents")
+    if delete_files:
+        for doc in docs:
+            if doc["stored_path"]:
+                p = Path(doc["stored_path"])
+                if p.exists():
+                    p.unlink()
+    return len(docs)
+
+
 def reindex_all() -> int:
     total = 0
     for doc in list_documents():

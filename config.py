@@ -4,7 +4,8 @@ from pathlib import Path
 # --- Paths ---
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
-UPLOADS_DIR = DATA_DIR / "uploads"        # source PDFs uploaded by admin
+CORPUS_DIR = DATA_DIR / "corpus"          # master knowledge-base PDFs (seed source)
+UPLOADS_DIR = DATA_DIR / "uploads"        # working copies indexed by the system
 EXPORTS_DIR = DATA_DIR / "exports"        # generated .docx files
 CHROMA_DIR = DATA_DIR / "chroma_db"       # persistent vector store
 DB_PATH = DATA_DIR / "app.db"             # sqlite database
@@ -63,5 +64,5 @@ STATUS_ACTIVE = "active"
 STATUS_INACTIVE = "inactive"
 
 # Ensure required folders exist (auto-create).
-for _d in (DATA_DIR, UPLOADS_DIR, EXPORTS_DIR, CHROMA_DIR):
+for _d in (DATA_DIR, CORPUS_DIR, UPLOADS_DIR, EXPORTS_DIR, CHROMA_DIR):
     _d.mkdir(parents=True, exist_ok=True)

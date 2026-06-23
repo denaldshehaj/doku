@@ -1,216 +1,153 @@
-"""Generate a small Albanian institutional sample corpus (PDFs with full metadata)
-and index it, so the system is demoable out of the box. Idempotent.
+"""Build the DOKU knowledge base from the master corpus of real Albanian laws.
 
-Run:  .venv\\Scripts\\python.exe scripts\\seed_sample_corpus.py
+The source-of-truth PDFs live in ``data/corpus/`` (committed to the repo). This
+script copies each into ``data/uploads/`` (the working copy the system serves),
+extracts + chunks + embeds it, and indexes it in ChromaDB so it is immediately
+searchable from the UI.
+
+By default it is idempotent (skips documents already present). Pass ``--reset``
+to wipe the existing corpus (SQLite rows + all vectors + working copies) and
+rebuild it from scratch — use this when the master corpus changes.
+
+Run:
+    .venv\\Scripts\\python.exe scripts\\seed_sample_corpus.py            # add missing
+    .venv\\Scripts\\python.exe scripts\\seed_sample_corpus.py --reset    # rebuild
 """
 import os
 import sys
-import tempfile
-from pathlib import Path
-
-import fitz  # PyMuPDF
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import config  # noqa: E402
 from modules import auth, database, document_processor as dp, documents  # noqa: E402
 
+# Master knowledge base: 13 real Albanian laws (Kuvendi i Shqipërisë). Each entry
+# maps a file in data/corpus/ to the metadata shown in the UI and citations.
 CORPUS = [
     {
-        "filename": "ligj_tatimor_2023.pdf",
-        "title": "Ligji për Procedurat Tatimore",
-        "institution": "Ministria e Financave", "document_type": "Ligj", "year": 2023,
-        "description": "Procedurat e deklarimit dhe pagesës së detyrimeve tatimore.",
-        "paragraphs": [
-            "Neni 1. Çdo tatimpagues është i detyruar të paraqesë deklaratën tatimore "
-            "vjetore brenda datës 31 mars të vitit pasardhës.",
-            "Neni 2. Mospagimi i detyrimeve tatimore brenda afatit ligjor sjell gjoba "
-            "administrative si dhe kamatëvonesa të llogaritura mbi shumën e papaguar.",
-            "Neni 3. Tatimpaguesi ka të drejtë të ankohet pranë Drejtorisë së Apelimit "
-            "Tatimor brenda 30 ditëve nga njoftimi i vlerësimit.",
-        ],
+        "filename": "ligj_152_2013_nenpunesi_civil.pdf",
+        "title": "Ligji nr. 152/2013 “Për Nëpunësin Civil”",
+        "year": 2013,
+        "description": "Rregullon marrëdhënien e shërbimit civil dhe administrimin "
+                       "e nëpunësve civilë në bazë të meritës dhe integritetit.",
     },
     {
-        "filename": "rregullore_punes_2022.pdf",
-        "title": "Rregullore për Marrëdhëniet e Punës",
-        "institution": "Ministria e Ekonomisë", "document_type": "Rregullore", "year": 2022,
-        "description": "Rregulla për oraret, pushimet dhe kontratat e punës.",
-        "paragraphs": [
-            "Punonjësi ka të drejtën e pushimit vjetor të paguar prej të paktën 28 "
-            "ditësh kalendarike në vit.",
-            "Orari normal i punës është 40 orë në javë. Puna jashtë orarit paguhet me "
-            "shtesë mbi pagën bazë sipas legjislacionit në fuqi.",
-            "Kontrata e punës mund të zgjidhet me njoftim paraprak prej të paktën 30 "
-            "ditësh nga secila palë.",
-        ],
+        "filename": "ligj_44_2015_kodi_procedurave_administrative.pdf",
+        "title": "Ligji nr. 44/2015 “Kodi i Procedurave Administrative i RSH”",
+        "year": 2015,
+        "description": "Rregullat e procesit të rregullt ligjor për nxjerrjen e "
+                       "akteve administrative dhe ushtrimin e funksioneve publike.",
     },
     {
-        "filename": "strategjia_dixhitale_2030.pdf",
-        "title": "Strategjia Kombëtare e Dixhitalizimit 2030",
-        "institution": "AKSHI", "document_type": "Strategji", "year": 2021,
-        "description": "Objektivat kombëtare për dixhitalizimin e shërbimeve publike.",
-        "paragraphs": [
-            "Strategjia synon ofrimin e të paktën 90 për qind të shërbimeve publike "
-            "online deri në vitin 2030.",
-            "Objektiv kryesor është reduktimi i barrës administrative për qytetarët dhe "
-            "bizneset përmes dixhitalizimit të procedurave.",
-            "Investimet do të përqendrohen në infrastrukturën e të dhënave, sigurinë "
-            "kibernetike dhe aftësimin dixhital të nëpunësve publikë.",
-        ],
+        "filename": "ligj_162_2020_prokurimi_publik.pdf",
+        "title": "Ligji nr. 162/2020 “Për Prokurimin Publik”",
+        "year": 2020,
+        "description": "Procedurat e prokurimit nga autoritetet kontraktore për "
+                       "kontratat publike dhe konkurset e projektimit.",
     },
     {
-        "filename": "vkm_paga_minimale_2024.pdf",
-        "title": "VKM për Pagën Minimale Mujore",
-        "institution": "Këshilli i Ministrave", "document_type": "VKM", "year": 2024,
-        "description": "Përcaktimi i pagës minimale mujore në shkallë vendi.",
-        "paragraphs": [
-            "Paga minimale mujore në shkallë vendi caktohet në vlerën 40000 lekë, e "
-            "vlefshme nga data 1 prill 2024.",
-            "Paga minimale zbatohet për të gjithë punonjësit me kohë të plotë pune prej "
-            "174 orësh në muaj.",
-            "Subjektet private dhe institucionet publike janë të detyruara të zbatojnë "
-            "pagën minimale; mospërmbushja ndëshkohet me gjobë.",
-        ],
+        "filename": "ligj_119_2014_e_drejta_e_informimit.pdf",
+        "title": "Ligji nr. 119/2014 “Për të Drejtën e Informimit”",
+        "year": 2014,
+        "description": "E drejta e njohjes me informacionin që prodhohet ose mbahet "
+                       "nga autoritetet publike.",
     },
     {
-        "filename": "ligj_arsimi_parauniversitar_2021.pdf",
-        "title": "Ligji për Arsimin Parauniversitar",
-        "institution": "Ministria e Arsimit dhe Sportit", "document_type": "Ligj", "year": 2021,
-        "description": "Organizimi i arsimit parauniversitar dhe detyrimi shkollor.",
-        "paragraphs": [
-            "Arsimi i detyrueshëm përfshin arsimin fillor dhe atë të mesëm të ulët dhe "
-            "është i detyrueshëm deri në moshën 16 vjeç.",
-            "Viti shkollor fillon në muajin shtator dhe përmban jo më pak se 175 ditë "
-            "mësimore.",
-            "Mësimi në institucionet publike të arsimit parauniversitar është falas për "
-            "të gjithë nxënësit.",
-        ],
+        "filename": "ligj_45_2015_dokumentet_ish_sigurimi.pdf",
+        "title": "Ligji nr. 45/2015 “Për të Drejtën e Informimit për Dokumentet e "
+                 "ish-Sigurimit të Shtetit”",
+        "year": 2015,
+        "description": "Procedurat për informimin mbi dokumentet e ish-Sigurimit të "
+                       "Shtetit të RPSSH.",
     },
     {
-        "filename": "udhezim_prokurimi_publik_2022.pdf",
-        "title": "Udhëzim për Procedurat e Prokurimit Publik",
-        "institution": "Agjencia e Prokurimit Publik", "document_type": "Udhëzim", "year": 2022,
-        "description": "Rregulla për procedurat dhe pragjet e prokurimit publik.",
-        "paragraphs": [
-            "Prokurimet me vlerë mbi pragun prej 1.2 milionë lekësh realizohen përmes "
-            "procedurës së hapur dhe publikohen në sistemin elektronik të prokurimeve.",
-            "Operatorët ekonomikë kanë të drejtë të paraqesin ankesë pranë autoritetit "
-            "kontraktor brenda 7 ditëve nga njoftimi i fituesit.",
-            "Çdo procedurë prokurimi duhet të respektojë parimet e transparencës, "
-            "barazisë dhe mosdiskriminimit të operatorëve.",
-        ],
+        "filename": "ligj_10_2023_informacioni_klasifikuar.pdf",
+        "title": "Ligji nr. 10/2023 “Për Informacionin e Klasifikuar”",
+        "year": 2023,
+        "description": "Parimet dhe rregullat për krijimin, administrimin dhe "
+                       "mbrojtjen e informacionit të klasifikuar.",
     },
     {
-        "filename": "strategjia_siguria_kombetare_2030.pdf",
-        "title": "Strategjia e Sigurisë Kombëtare",
-        "institution": "Ministria e Mbrojtjes", "document_type": "Strategji", "year": 2022,
-        "description": "Objektivat strategjikë për sigurinë dhe mbrojtjen kombëtare.",
-        "paragraphs": [
-            "Strategjia synon forcimin e kapaciteteve mbrojtëse dhe ndërveprimin me "
-            "aleatët e NATO-s deri në vitin 2030.",
-            "Prioritet i veçantë i jepet sigurisë kibernetike dhe mbrojtjes së "
-            "infrastrukturës kritike kombëtare.",
-            "Buxheti i mbrojtjes synohet të mbahet në nivelin prej 2 për qind të "
-            "Prodhimit të Brendshëm Bruto.",
-        ],
+        "filename": "ligj_9367_2005_konflikti_interesave.pdf",
+        "title": "Ligji nr. 9367/2005 “Për Parandalimin e Konfliktit të "
+                 "Interesave në Ushtrimin e Funksioneve Publike”",
+        "year": 2005,
+        "description": "Identifikimi, deklarimi dhe zgjidhja e konfliktit ndërmjet "
+                       "interesave publikë dhe privatë të zyrtarëve.",
     },
     {
-        "filename": "rregullore_mbrojtja_civile_2020.pdf",
-        "title": "Rregullore për Mbrojtjen Civile dhe Emergjencat",
-        "institution": "Ministria e Mbrojtjes", "document_type": "Rregullore", "year": 2020,
-        "description": "Masat dhe procedurat në rast emergjencash civile.",
-        "paragraphs": [
-            "Në rast fatkeqësie natyrore, organet vendore aktivizojnë planin e "
-            "emergjencës civile brenda 24 orëve.",
-            "Evakuimi i popullatës nga zonat e rrezikuara koordinohet nga komiteti i "
-            "emergjencave civile në bashkëpunim me Forcat e Armatosura.",
-            "Çdo institucion publik është i detyruar të hartojë planin e vet të "
-            "vazhdimësisë së punës në situata emergjence.",
-        ],
+        "filename": "ligj_9154_2003_arkivat.pdf",
+        "title": "Ligji nr. 9154/2003 “Për Arkivat”",
+        "year": 2003,
+        "description": "Organizimi i shërbimit arkivor dhe detyrimet për krijimin, "
+                       "ruajtjen dhe shfrytëzimin e pasurisë arkivore.",
     },
     {
-        "filename": "ligj_sherbimi_ushtarak_2018.pdf",
-        "title": "Ligji për Shërbimin në Forcat e Armatosura",
-        "institution": "Ministria e Mbrojtjes", "document_type": "Ligj", "year": 2018,
-        "description": "Kushtet e shërbimit në Forcat e Armatosura.",
-        "paragraphs": [
-            "Në shërbimin aktiv ushtarak pranohen shtetas shqiptarë të moshës 18 deri "
-            "në 30 vjeç që plotësojnë kriteret shëndetësore dhe arsimore.",
-            "Kontrata e parë e shërbimit ushtarak aktiv lidhet për një periudhë prej 4 "
-            "vjetësh, me mundësi rinovimi.",
-            "Ushtaraku ka të drejtën e trajnimit profesional, pagës mujore dhe lejes "
-            "vjetore sipas legjislacionit ushtarak.",
-        ],
+        "filename": "ligj_8480_1999_organet_kolegjiale.pdf",
+        "title": "Ligji nr. 8480/1999 “Për Funksionimin e Organeve Kolegjiale të "
+                 "Administratës Shtetërore dhe Enteve Publike”",
+        "year": 1999,
+        "description": "Rregullat për vendimmarrjen kolegjiale në administratën "
+                       "shtetërore dhe entet publike.",
     },
     {
-        "filename": "raport_buxheti_vjetor_2022.pdf",
-        "title": "Raporti Vjetor i Zbatimit të Buxhetit",
-        "institution": "Ministria e Financave", "document_type": "Raport", "year": 2023,
-        "description": "Pasqyra e të ardhurave dhe shpenzimeve buxhetore për vitin 2022.",
-        "paragraphs": [
-            "Të ardhurat totale buxhetore për vitin 2022 arritën në 580 miliardë lekë, "
-            "ose 98 për qind të planit vjetor.",
-            "Shpenzimet kapitale për investime publike përbënë 22 për qind të "
-            "shpenzimeve totale të buxhetit.",
-            "Deficiti buxhetor u mbajt brenda nivelit të planifikuar prej 3.5 për qind "
-            "të Prodhimit të Brendshëm Bruto.",
-        ],
+        "filename": "ligj_7514_1991_pafajesia_amnistia_rehabilitimi.pdf",
+        "title": "Ligji nr. 7514/1991 “Për Pafajësinë, Amnistinë dhe "
+                 "Rehabilitimin e ish të Dënuarve dhe të Përndjekurve Politikë”",
+        "year": 1991,
+        "description": "Njohja e pafajësisë dhe rehabilitimi i të dënuarve e të "
+                       "përndjekurve politikë gjatë regjimit komunist.",
     },
     {
-        "filename": "vkm_transport_publik_2023.pdf",
-        "title": "VKM për Transportin Publik Rrugor",
-        "institution": "Ministria e Infrastrukturës", "document_type": "VKM", "year": 2023,
-        "description": "Rregulla për licencimin dhe tarifat e transportit publik.",
-        "paragraphs": [
-            "Licenca për transport publik rrugor të udhëtarëve lëshohet për një afat prej "
-            "5 vjetësh dhe rinovohet me kërkesë të operatorit.",
-            "Tarifat e transportit publik miratohen nga njësia e vetëqeverisjes vendore "
-            "dhe afishohen në çdo mjet transporti.",
-            "Operatorët janë të detyruar të sigurojnë akses për personat me aftësi të "
-            "kufizuara në mjetet e transportit publik.",
-        ],
+        "filename": "ligj_9936_2008_sistemi_buxhetor.pdf",
+        "title": "Ligji nr. 9936/2008 “Për Menaxhimin e Sistemit Buxhetor në "
+                 "Republikën e Shqipërisë”",
+        "year": 2008,
+        "description": "Struktura, parimet dhe bazat e procesit buxhetor dhe "
+                       "marrëdhëniet financiare ndërqeveritare.",
     },
     {
-        "filename": "udhezim_nenshkrimi_elektronik_2024.pdf",
-        "title": "Udhëzim për Nënshkrimin Elektronik",
-        "institution": "AKSHI", "document_type": "Udhëzim", "year": 2024,
-        "description": "Përdorimi dhe vlefshmëria e nënshkrimit elektronik.",
-        "paragraphs": [
-            "Nënshkrimi elektronik i kualifikuar ka të njëjtën vlerë ligjore si "
-            "nënshkrimi i shkruar me dorë.",
-            "Dokumentet zyrtare të institucioneve publike mund të nënshkruhen "
-            "elektronikisht dhe ruhen në format dixhital.",
-            "Certifikata e nënshkrimit elektronik ka një afat vlefshmërie prej 3 vjetësh "
-            "dhe duhet rinovuar para skadimit.",
-        ],
+        "filename": "ligj_10296_2010_menaxhimi_financiar_kontrolli.pdf",
+        "title": "Ligji nr. 10296/2010 “Për Menaxhimin Financiar dhe Kontrollin”",
+        "year": 2010,
+        "description": "Parimet dhe procedurat e menaxhimit financiar e kontrollit "
+                       "në njësitë e sektorit publik.",
+    },
+    {
+        "filename": "ligj_115_2021_buxheti_2022.pdf",
+        "title": "Ligji nr. 115/2021 “Për Buxhetin e Vitit 2022”",
+        "year": 2021,
+        "description": "Të ardhurat, shpenzimet dhe deficiti i buxhetit të shtetit "
+                       "për vitin 2022.",
     },
 ]
 
-
-def make_pdf(path: Path, title: str, paragraphs: list[str]) -> None:
-    doc = fitz.open()
-    page = doc.new_page()
-    body = title + "\n\n" + "\n\n".join(paragraphs)
-    page.insert_textbox(fitz.Rect(50, 50, 545, 800), body, fontsize=12, fontname="helv")
-    doc.save(str(path))
-    doc.close()
+INSTITUTION = "Kuvendi i Shqipërisë"
+DOCUMENT_TYPE = "Ligj"
 
 
-def main():
+def main(reset: bool = False):
     database.init_schema()
     auth.ensure_default_admin()
-    tmp = Path(tempfile.gettempdir())
+
+    if reset:
+        removed = documents.purge_all_documents(delete_files=True)
+        print(f"  (reset) U hoqën {removed} dokumente ekzistuese.")
+
     added = 0
     for item in CORPUS:
+        src = config.CORPUS_DIR / item["filename"]
+        if not src.exists():
+            print(f"  ! mungon te corpus/: {item['filename']}")
+            continue
         if documents.get_document_by_filename(documents.safe_filename(item["filename"])):
             print(f"  (ekziston) {item['filename']}")
             continue
-        pdf = tmp / item["filename"]
-        make_pdf(pdf, item["title"], item["paragraphs"])
         try:
             _, n = documents.add_document(
-                pdf, item["filename"], title=item["title"],
-                institution=item["institution"], document_type=item["document_type"],
-                year=item["year"], description=item["description"], uploaded_by="admin")
+                src, item["filename"], title=item["title"], institution=INSTITUTION,
+                document_type=DOCUMENT_TYPE, year=item["year"],
+                description=item["description"], uploaded_by="admin")
             print(f"  + {item['filename']} ({n} copëza)")
             added += 1
         except (dp.NoExtractableTextError, ValueError) as e:
@@ -219,4 +156,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(reset="--reset" in sys.argv)

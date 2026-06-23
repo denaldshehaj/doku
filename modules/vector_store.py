@@ -70,6 +70,16 @@ def delete_document(doc_id: int) -> None:
     _get_collection().delete(where={"document_id": doc_id})
 
 
+def reset_collection() -> None:
+    """Drop and recreate the whole vector collection (used when rebuilding the
+    corpus from scratch)."""
+    global _collection
+    _get_collection()  # ensure the client is initialised
+    _client.delete_collection(name=COLLECTION)
+    _collection = _client.get_or_create_collection(
+        name=COLLECTION, metadata={"hnsw:space": "cosine"})
+
+
 def _build_where(active_doc_ids, document_id):
     if document_id is not None:
         return {"document_id": int(document_id)}
