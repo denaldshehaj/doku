@@ -68,36 +68,53 @@ st.markdown("##### ✏️ Ndrysho një përdorues")
 by_name = {u["username"]: u for u in users}
 sel = st.selectbox("Përdoruesi", list(by_name.keys()), key="edit_user")
 cur = by_name[sel]
-is_self = sel == user["username"]
+
+# Number of *other* active admins — used to block the change only if it would
+# leave the system with no admin at all (full lockout).
+other_active_admins = sum(
+    1 for u in users if u["role"] == auth.ADMIN and u["is_active"]
+    and u["username"] != sel)
 
 e1, e2 = st.columns(2)
 new_name = e1.text_input("Emri i plotë", value=cur["full_name"] or "", key="edit_name")
 roles = [auth.PUNONJES, auth.ADMIN]
 new_role = e2.selectbox(
     "Roli", roles, index=roles.index(cur["role"]),
-    format_func=lambda r: ui.ROLE_LABELS[r], key="edit_role",
-    disabled=is_self, help="Nuk mund të ndryshoni rolin tuaj." if is_self else None)
+    format_func=lambda r: ui.ROLE_LABELS[r], key="edit_role")
 statuses = [True, False]
 new_active = st.selectbox(
     "Statusi", statuses, index=0 if cur["is_active"] else 1,
-    format_func=lambda a: "Aktiv" if a else "Joaktiv", key="edit_status",
-    disabled=is_self, help="Nuk mund të çaktivizoni veten." if is_self else None)
+    format_func=lambda a: "Aktiv" if a else "Joaktiv", key="edit_status")
 
 if st.button("💾 Ruaj ndryshimet", type="primary"):
-    changed = 0
+    changed, blocked = 0, []
+    losing_admin = cur["role"] == auth.ADMIN and (
+        new_role != auth.ADMIN or not new_active)
+    last_admin = losing_admin and other_active_admins == 0
+
     if (new_name or "").strip() != (cur["full_name"] or ""):
         auth.set_full_name(sel, new_name); changed += 1
-    if not is_self and new_role != cur["role"]:
-        auth.set_role(sel, new_role)
-        audit.log(user["id"], user["username"], "set_role", f"{sel} -> {new_role}")
-        changed += 1
-    if not is_self and bool(new_active) != bool(cur["is_active"]):
-        auth.set_active(sel, new_active)
-        audit.log(user["id"], user["username"], "set_active", f"{sel}={new_active}")
-        changed += 1
+    if new_role != cur["role"]:
+        if last_admin and new_role != auth.ADMIN:
+            blocked.append("roli (do të mbetej pa asnjë administrator aktiv)")
+        else:
+            auth.set_role(sel, new_role)
+            audit.log(user["id"], user["username"], "set_role", f"{sel} -> {new_role}")
+            changed += 1
+    if bool(new_active) != bool(cur["is_active"]):
+        if last_admin and not new_active:
+            blocked.append("statusi (do të mbetej pa asnjë administrator aktiv)")
+        else:
+            auth.set_active(sel, new_active)
+            audit.log(user["id"], user["username"], "set_active", f"{sel}={new_active}")
+            changed += 1
     if changed:
-        st.success(f"U ruajtën ndryshimet për '{sel}'."); st.rerun()
-    else:
+        st.success(f"U ruajtën ndryshimet për '{sel}'.")
+    if blocked:
+        st.warning("U bllokua: " + "; ".join(blocked))
+    if changed:
+        st.rerun()
+    elif not blocked:
         st.info("Nuk ka ndryshime për të ruajtur.")
 
 # --- Password management ----------------------------------------------------
