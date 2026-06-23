@@ -18,6 +18,15 @@ def _get_client():
     return _client
 
 
+def _reset_client() -> None:
+    """Drop the cached client so the next call rebuilds a fresh connection.
+    Needed because the underlying httpx client can end up permanently 'closed'
+    after a dropped connection (e.g. an OOM that restarts the model), which
+    would otherwise break every subsequent request in a batch run."""
+    global _client
+    _client = None
+
+
 def get_active_model() -> str:
     return _active_model or config.OLLAMA_MODEL
 
@@ -59,16 +68,21 @@ def generate(prompt: str, system: str | None = None,
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
-    try:
-        resp = _get_client().chat(
-            model=get_active_model(), messages=messages,
-            options={"temperature": config.LLM_TEMPERATURE if temperature is None
-                     else temperature},
-        )
-    except Exception as exc:
-        raise OllamaUnavailableError(
-            "Shërbimi i modelit lokal (Ollama) nuk është aktiv ose modeli mungon. "
-            "Sigurohu që Ollama po ekzekuton dhe modeli është shkarkuar "
-            f"(`ollama pull {get_active_model()}`). Detaje: {exc}"
-        )
-    return resp["message"]["content"].strip()
+    options = {"temperature": config.LLM_TEMPERATURE if temperature is None
+               else temperature}
+    # One transparent retry: if the cached connection has gone stale/closed
+    # (e.g. after an OOM-driven model restart mid-batch), rebuild and try again.
+    last_exc = None
+    for _attempt in range(2):
+        try:
+            resp = _get_client().chat(model=get_active_model(),
+                                      messages=messages, options=options)
+            return resp["message"]["content"].strip()
+        except Exception as exc:
+            last_exc = exc
+            _reset_client()
+    raise OllamaUnavailableError(
+        "Shërbimi i modelit lokal (Ollama) nuk është aktiv ose modeli mungon. "
+        "Sigurohu që Ollama po ekzekuton dhe modeli është shkarkuar "
+        f"(`ollama pull {get_active_model()}`). Detaje: {last_exc}"
+    )
