@@ -32,9 +32,19 @@ def _user_dict(user) -> dict:
             "full_name": user["full_name"] or ""}
 
 
+def _ensure_sid_in_url():
+    """Keep the session token in the URL on every run. Streamlit drops unknown
+    query params when navigating between pages, so without re-asserting it a
+    refresh on any non-default page would lose the token (and log the user out)."""
+    token = st.session_state.get("sid")
+    if token and st.query_params.get("sid") != token:
+        st.query_params["sid"] = token
+
+
 def current_user():
     user = st.session_state.get("user")
     if user:
+        _ensure_sid_in_url()
         return user
     # No in-memory session (e.g. after a browser refresh): try to restore from
     # the persistent session token carried in the URL.
@@ -43,6 +53,8 @@ def current_user():
         row = auth.resolve_session(token)
         if row is not None:
             st.session_state.user = _user_dict(row)
+            st.session_state.sid = token
+            _ensure_sid_in_url()
             return st.session_state.user
         # Token invalid/expired/revoked — drop it from the URL.
         del st.query_params["sid"]
@@ -68,10 +80,11 @@ def login_screen():
                     st.error("Kredenciale të pasakta ose llogari joaktive.")
                 else:
                     st.session_state.user = _user_dict(user)
-                    # Persist a session token in the URL so a refresh keeps the
-                    # user logged in.
-                    st.query_params["sid"] = auth.create_session(
+                    # Persist a session token (kept in the URL each run) so a
+                    # refresh keeps the user logged in.
+                    st.session_state.sid = auth.create_session(
                         user["id"], user["username"])
+                    st.query_params["sid"] = st.session_state.sid
                     audit.log(user["id"], user["username"], "login_success")
                     st.rerun()
 
@@ -113,7 +126,8 @@ def sidebar(user):
         st.divider()
         if st.button("🚪 Dil", use_container_width=True):
             audit.log(user["id"], user["username"], "logout")
-            auth.delete_session(st.query_params.get("sid"))
+            auth.delete_session(st.session_state.get("sid") or st.query_params.get("sid"))
+            st.session_state.pop("sid", None)
             st.query_params.clear()
             st.session_state.pop("user", None)
             st.rerun()
