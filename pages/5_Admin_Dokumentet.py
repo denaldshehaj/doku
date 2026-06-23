@@ -126,9 +126,13 @@ for d in docs:
                                        file_name=d["filename"], mime=mime,
                                        key=f"dl{d['id']}")
                 if is_pdf:
-                    imgs = dp.render_pdf_images(path, max_pages=10)
+                    # Render at a higher zoom for sharpness, but show the page
+                    # in a narrower centered column so it reads like a page on
+                    # screen instead of being stretched/zoomed across the panel.
+                    imgs = dp.render_pdf_images(path, max_pages=10, zoom=2.0)
                     for img in imgs:
-                        st.image(img, use_container_width=True)
+                        mid = st.columns([1, 2, 1])[1]
+                        mid.image(img, use_container_width=True)
                     if d["num_pages"] > 10:
                         st.caption("Parapamje e kufizuar te 10 faqet e para. "
                                    "Shkarko skedarin për pamjen e plotë.")

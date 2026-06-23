@@ -2,6 +2,7 @@
 text). Two roles: admin / punonjes. A default admin is auto-created if none
 exists, and is flagged to change its password on first login."""
 import re
+import secrets
 
 import bcrypt
 
@@ -78,14 +79,32 @@ def authenticate(username: str, password: str):
     return row
 
 
-def set_password(username: str, new_password: str) -> None:
+def set_password(username: str, new_password: str, must_change: bool = False) -> None:
     if not new_password or len(new_password) < MIN_PASSWORD_LEN:
         raise ValueError(f"Fjalëkalimi duhet të paktën {MIN_PASSWORD_LEN} karaktere.")
     with db.get_conn() as conn:
         conn.execute(
-            "UPDATE users SET password_hash = ?, must_change_password = 0, "
+            "UPDATE users SET password_hash = ?, must_change_password = ?, "
             "updated_at = datetime('now') WHERE username = ?",
-            (hash_password(new_password), username.strip()),
+            (hash_password(new_password), int(must_change), username.strip()),
+        )
+
+
+def reset_password(username: str) -> str:
+    """Reset a user's password to a random temporary one, forcing a change on
+    next login. Returns the temporary password so the admin can pass it on."""
+    temp = secrets.token_urlsafe(9)
+    set_password(username, temp, must_change=True)
+    return temp
+
+
+def set_role(username: str, role: str) -> None:
+    if role not in ROLES:
+        raise ValueError("Rol i pavlefshëm.")
+    with db.get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET role = ?, updated_at = datetime('now') "
+            "WHERE username = ?", (role, username.strip()),
         )
 
 
