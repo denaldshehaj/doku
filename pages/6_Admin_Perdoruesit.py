@@ -76,15 +76,19 @@ other_active_admins = sum(
     and u["username"] != sel)
 
 e1, e2 = st.columns(2)
-new_name = e1.text_input("Emri i plotë", value=cur["full_name"] or "", key="edit_name")
+# Keys are scoped to the selected user so the widgets re-initialise to that
+# user's current values when the selection changes (otherwise Streamlit keeps
+# the stale value and ignores `index=`, making the dropdowns un-changeable).
+new_name = e1.text_input("Emri i plotë", value=cur["full_name"] or "",
+                         key=f"edit_name_{sel}")
 roles = [auth.PUNONJES, auth.ADMIN]
 new_role = e2.selectbox(
     "Roli", roles, index=roles.index(cur["role"]),
-    format_func=lambda r: ui.ROLE_LABELS[r], key="edit_role")
+    format_func=lambda r: ui.ROLE_LABELS[r], key=f"edit_role_{sel}")
 statuses = [True, False]
 new_active = st.selectbox(
     "Statusi", statuses, index=0 if cur["is_active"] else 1,
-    format_func=lambda a: "Aktiv" if a else "Joaktiv", key="edit_status")
+    format_func=lambda a: "Aktiv" if a else "Joaktiv", key=f"edit_status_{sel}")
 
 if st.button("💾 Ruaj ndryshimet", type="primary"):
     changed, blocked = 0, []
