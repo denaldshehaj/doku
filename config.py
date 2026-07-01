@@ -1,6 +1,41 @@
 """Central configuration for DOKU. All tunables live here."""
 import os
+import sys
 from pathlib import Path
+
+
+def _prepare_native_runtime() -> None:
+    """Windows: make PyTorch / onnxruntime native DLLs load reliably.
+
+    Their c10.dll / onnxruntime_pybind11_state need a current Microsoft Visual C++
+    runtime; an older system copy causes "WinError 1114" load failures. The
+    `msvc-runtime` package (see requirements.txt) drops a current runtime next to
+    python.exe (the Scripts dir). We preload those DLLs here — before torch or
+    chromadb import anywhere — so every later native load finds the good runtime.
+    We also allow duplicate OpenMP runtimes (torch + onnxruntime) instead of
+    aborting the process. All best-effort: failures never block startup."""
+    if sys.platform != "win32":
+        return
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+    try:
+        import ctypes
+        scripts_dir = os.path.dirname(sys.executable)
+        for name in (
+            "vcruntime140.dll", "vcruntime140_1.dll", "concrt140.dll",
+            "msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll",
+            "msvcp140_atomic_wait.dll", "msvcp140_codecvt_ids.dll",
+        ):
+            dll = os.path.join(scripts_dir, name)
+            if os.path.exists(dll):
+                try:
+                    ctypes.WinDLL(dll)
+                except OSError:
+                    pass
+    except Exception:
+        pass
+
+
+_prepare_native_runtime()
 
 # --- Paths ---
 ROOT = Path(__file__).resolve().parent

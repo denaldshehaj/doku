@@ -6,3 +6,8 @@ sentence-transformers
 ollama
 python-docx
 bcrypt
+
+# Windows only: ships a current Microsoft Visual C++ runtime (msvcp140*.dll,
+# vcruntime140*.dll). PyTorch's and onnxruntime's native DLLs need it; older
+# system copies cause "WinError 1114 / c10.dll" load failures. Harmless elsewhere.
+msvc-runtime; platform_system == "Windows"

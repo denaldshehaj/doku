@@ -119,14 +119,32 @@ def get_conn():
 
 _schema_ready = False
 
+# Tables the app relies on. If all of these already exist (the normal case, since
+# a pre-built app.db is shipped), init_schema() does no write at all.
+_REQUIRED_TABLES = (
+    "users", "documents", "chat_history", "audit_logs", "sessions",
+    "experiment_results",
+)
+
 
 def init_schema() -> None:
-    """Create all tables if they do not exist. Idempotent, and runs its write
-    transaction only once per process — Streamlit re-executes the entrypoint on
-    every rerun, and repeating the schema write caused lock contention."""
+    """Ensure all tables exist. Idempotent and lock-safe:
+
+    Streamlit re-executes the entrypoint on every interaction, so this runs a lot.
+    The write path (executescript) takes a RESERVED/EXCLUSIVE lock, and repeating
+    it across concurrent reruns/processes is what produced "database is locked".
+    We therefore (a) only ever run the write once per process, and (b) skip the
+    write entirely when every required table is already present — a plain read,
+    which never blocks. A write happens only on a genuinely empty/new database."""
     global _schema_ready
     if _schema_ready:
         return
     with get_conn() as conn:
-        conn.executescript(SCHEMA)
+        existing = {
+            row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        if not all(table in existing for table in _REQUIRED_TABLES):
+            conn.executescript(SCHEMA)
     _schema_ready = True

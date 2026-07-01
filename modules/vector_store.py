@@ -6,6 +6,14 @@ filter by active documents / a specific document. The vector store is created
 automatically if missing."""
 from dataclasses import dataclass
 
+# IMPORTANT (Windows): import torch BEFORE chromadb. torch bundles a current VC++
+# runtime in torch/lib and registers that directory on the process DLL search
+# path when it loads. chromadb's onnxruntime needs the same runtime; if chromadb
+# loads first it picks up the older system DLLs and either fails to initialise or
+# clashes with torch's OpenMP, crashing the process. Loading torch first fixes
+# both. (torch is pulled in anyway via sentence-transformers for embeddings.)
+import torch  # noqa: F401  (imported for its DLL side effects / load order)
+
 import chromadb
 
 import config

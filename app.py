@@ -11,8 +11,16 @@ from modules import audit, auth, database, llm_client
 st.set_page_config(page_title="DOKU", page_icon="📄", layout="wide")
 
 # --- Bootstrap: auto-create folders, DB, and default admin if missing ---
-database.init_schema()
-auth.ensure_default_admin()
+# @st.cache_resource runs this exactly once per server process (not on every
+# script rerun), so the schema/admin bootstrap can never contend with itself.
+@st.cache_resource
+def _bootstrap() -> bool:
+    database.init_schema()
+    auth.ensure_default_admin()
+    return True
+
+
+_bootstrap()
 
 ROLE_LABELS = {auth.ADMIN: "Administrator", auth.PUNONJES: "Punonjës"}
 
@@ -150,16 +158,16 @@ def main():
         return
 
     employee_pages = [
-        st.Page("pages/1_Dashboard.py", title="Paneli", icon="🏠", default=True),
-        st.Page("pages/2_Pyet_Dokumentet.py", title="Pyet Dokumentet", icon="❓"),
-        st.Page("pages/3_Permbledhje_Dokumenti.py", title="Përmbledhje", icon="📝"),
-        st.Page("pages/4_Historiku.py", title="Historiku im", icon="🕘"),
+        st.Page("views/1_Dashboard.py", title="Paneli", icon="🏠", default=True),
+        st.Page("views/2_Pyet_Dokumentet.py", title="Pyet Dokumentet", icon="❓"),
+        st.Page("views/3_Permbledhje_Dokumenti.py", title="Përmbledhje", icon="📝"),
+        st.Page("views/4_Historiku.py", title="Historiku im", icon="🕘"),
     ]
     admin_pages = [
-        st.Page("pages/5_Admin_Dokumentet.py", title="Dokumentet", icon="📄"),
-        st.Page("pages/6_Admin_Perdoruesit.py", title="Përdoruesit", icon="👥"),
-        st.Page("pages/7_Admin_Audit_Log.py", title="Audit Log", icon="📋"),
-        st.Page("pages/8_Eksperimente.py", title="Eksperimente", icon="🧪"),
+        st.Page("views/5_Admin_Dokumentet.py", title="Dokumentet", icon="📄"),
+        st.Page("views/6_Admin_Perdoruesit.py", title="Përdoruesit", icon="👥"),
+        st.Page("views/7_Admin_Audit_Log.py", title="Audit Log", icon="📋"),
+        st.Page("views/8_Eksperimente.py", title="Eksperimente", icon="🧪"),
     ]
     pages = employee_pages + (admin_pages if user["role"] == auth.ADMIN else [])
     nav = st.navigation(pages)
