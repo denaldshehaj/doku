@@ -4,6 +4,7 @@ chat history, audit logs, and experiment results. Chunk vectors live in ChromaDB
 If the DB or its folder is missing, it is created automatically.
 """
 import sqlite3
+import time
 from contextlib import contextmanager
 
 import config
@@ -89,22 +90,46 @@ CREATE TABLE IF NOT EXISTS experiment_results (
 """
 
 
+def _is_locked(err: Exception) -> bool:
+    msg = str(err).lower()
+    return "locked" in msg or "busy" in msg
+
+
 def connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(config.DB_PATH, timeout=30)
-    conn.row_factory = sqlite3.Row
-    # busy_timeout first: makes every subsequent statement wait (up to 30s) for a
-    # lock instead of failing instantly with "database is locked".
-    conn.execute("PRAGMA busy_timeout = 30000")
-    conn.execute("PRAGMA foreign_keys = ON")
-    # WAL lets readers and a writer work concurrently — essential because Streamlit
-    # re-runs the script (and reopens connections) on every interaction. Switching
-    # journal mode needs a brief exclusive lock; if another connection holds it we
-    # tolerate the failure (the DB simply stays in its current mode this time).
-    try:
-        conn.execute("PRAGMA journal_mode = WAL")
-    except sqlite3.OperationalError:
-        pass
-    return conn
+    # A cold WAL database can briefly report "database is locked" while the first
+    # connection builds the -wal/-shm index (busy_timeout does not always cover
+    # this recovery lock, especially when two Streamlit instances start at once).
+    # Retry the open + PRAGMA setup a few times before giving up.
+    last_err = None
+    for attempt in range(12):
+        conn = None
+        try:
+            conn = sqlite3.connect(config.DB_PATH, timeout=30)
+            conn.row_factory = sqlite3.Row
+            # busy_timeout first: makes every subsequent statement wait (up to 30s)
+            # for a lock instead of failing instantly with "database is locked".
+            conn.execute("PRAGMA busy_timeout = 30000")
+            conn.execute("PRAGMA foreign_keys = ON")
+            # WAL lets readers and a writer work concurrently — essential because
+            # Streamlit reopens connections on every interaction. Switching journal
+            # mode needs a brief exclusive lock; tolerate a transient failure (the
+            # DB simply stays in its current mode this time).
+            try:
+                conn.execute("PRAGMA journal_mode = WAL")
+            except sqlite3.OperationalError:
+                pass
+            return conn
+        except sqlite3.OperationalError as err:
+            last_err = err
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            if not _is_locked(err):
+                raise
+            time.sleep(0.25 * (attempt + 1))
+    raise last_err
 
 
 @contextmanager
@@ -139,12 +164,22 @@ def init_schema() -> None:
     global _schema_ready
     if _schema_ready:
         return
-    with get_conn() as conn:
-        existing = {
-            row[0] for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
-        }
-        if not all(table in existing for table in _REQUIRED_TABLES):
-            conn.executescript(SCHEMA)
-    _schema_ready = True
+    last_err = None
+    for attempt in range(15):
+        try:
+            with get_conn() as conn:
+                existing = {
+                    row[0] for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+                if not all(table in existing for table in _REQUIRED_TABLES):
+                    conn.executescript(SCHEMA)
+            _schema_ready = True
+            return
+        except sqlite3.OperationalError as err:
+            last_err = err
+            if not _is_locked(err):
+                raise
+            time.sleep(0.3 * (attempt + 1))
+    raise last_err
