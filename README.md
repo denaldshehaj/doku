@@ -13,27 +13,41 @@ Sentence Transformers (bge-m3) · Ollama (LLM lokal) · python-docx.
 - **Administratori** ngarkon dhe mirëmban një korpus të centralizuar dokumentesh zyrtare.
 - **Punonjësi** kërkon, pyet, përmbledh dhe eksporton — pa të drejtë ndryshimi të korpusit.
 
-## Instalimi (Windows 11)
+## Instalimi (Windows)
+Baza e të dhënave, indeksi vektorial (ChromaDB) dhe korpusi janë **të përfshirë në repo**,
+ndaj pas `git clone` mjafton të instalosh varësitë dhe të shkarkosh modelin lokal — **pa
+rebuild**:
 ```powershell
-python -m venv .venv
+py -3.13 -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-ollama pull gemma2:9b          # ose: ollama pull qwen2.5:3b (më i shpejtë)
-python scripts\seed_sample_corpus.py   # opsionale: korpus shembull
+ollama pull qwen2.5:3b         # modeli lokal (i rekomanduar); s'mund të përfshihet në git
 streamlit run app.py
 ```
-> Variabli i modelit: `OLLAMA_MODEL` te `config.py` (temperaturë e ulët 0.2).
-> Nëse Ollama nuk është aktive, sistemi shfaq error të kuptueshëm në shqip.
+> **E vetmja varësi jashtë-git:** venv-i (`pip install`) dhe modeli Ollama (`ollama pull`).
+> Korpusi (13 ligje reale), të 2179 copëzat e indeksuara, përdoruesit dhe konfigurimi vijnë
+> gati brenda repos.
 
-## Kredencialet default
-Në nisjen e parë krijohet automatikisht administratori:
+### Rindërtim i korpusit (opsional)
+Nëse ndryshon dokumentet te `data/corpus/`, riindekso nga e para:
+```powershell
+python scripts\seed_sample_corpus.py --reset
+```
+> Modeli caktohet te `OLLAMA_MODEL` në `config.py` ose nga dropdown-i në sidebar
+> (`qwen2.5:3b` më i shpejtë; `gemma2:9b` shqipe më e mirë por kërkon më shumë RAM).
+
+## Kredencialet
+Baza e përfshirë vjen me administratorin dhe disa përdorues demo:
 
 | Përdoruesi | Fjalëkalimi | Roli  |
 |------------|-------------|-------|
-| `admin`    | `***REMOVED-CREDENTIAL***`  | admin |
+| `admin`    | `123456`    | admin |
+| përdoruesit demo (`emri.mbiemri`) | `demo123` | punonjës/admin |
 
-> ⚠️ Në hyrjen e parë, admin-i **detyrohet të ndryshojë fjalëkalimin**. Punonjësit krijohen
-> nga administratori (faqja **Përdoruesit**) dhe gjithashtu ndryshojnë fjalëkalimin në hyrje.
+> ⚠️ **Siguri:** nëse e publikon repon, ndrysho fjalëkalimin e admin-it pas klonimit
+> (faqja **Përdoruesit**), sepse baza e komituar përmban llogaritë me këto fjalëkalime.
+> Nëse fshin `data/app.db`, në nisjen e parë rikrijohet admin-i default `admin`/`***REMOVED-CREDENTIAL***`
+> (i detyruar të ndryshojë fjalëkalimin).
 
 ## Përdorimi
 - **Ngarkim dokumenti (admin):** faqja *Dokumentet* → *Ngarko dokument të ri* → zgjidh PDF,
