@@ -90,9 +90,20 @@ CREATE TABLE IF NOT EXISTS experiment_results (
 
 
 def connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(config.DB_PATH)
+    conn = sqlite3.connect(config.DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    # busy_timeout first: makes every subsequent statement wait (up to 30s) for a
+    # lock instead of failing instantly with "database is locked".
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL lets readers and a writer work concurrently — essential because Streamlit
+    # re-runs the script (and reopens connections) on every interaction. Switching
+    # journal mode needs a brief exclusive lock; if another connection holds it we
+    # tolerate the failure (the DB simply stays in its current mode this time).
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+    except sqlite3.OperationalError:
+        pass
     return conn
 
 
@@ -106,7 +117,16 @@ def get_conn():
         conn.close()
 
 
+_schema_ready = False
+
+
 def init_schema() -> None:
-    """Create all tables if they do not exist. Idempotent."""
+    """Create all tables if they do not exist. Idempotent, and runs its write
+    transaction only once per process — Streamlit re-executes the entrypoint on
+    every rerun, and repeating the schema write caused lock contention."""
+    global _schema_ready
+    if _schema_ready:
+        return
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+    _schema_ready = True

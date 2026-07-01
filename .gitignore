@@ -7,9 +7,20 @@ __pycache__/
 # Local-only tooling (e.g. cloudflared binary for the tunnel) — not committed
 tools/
 
+# SECURITY: credentials never leave this machine.
+# Local admin bootstrap secrets (see secrets_local.example.py for the template).
+secrets_local.py
+# The SQLite DB holds user password hashes (+ sessions/chat/audit) — keep local.
+data/app.db
+data/app.db-wal
+data/app.db-shm
+
+# Local-only thesis document (kept out of git by request).
+docs/Teza_DOKU.docx
+
 # Committed for clone-and-run: data/corpus/ (source PDFs), data/uploads/ (working
-# copies), data/chroma_db/ (vector index) and data/app.db (users + documents).
-# Only generated Word exports stay out of git.
+# copies) and data/chroma_db/ (vector index). Generated Word exports and the
+# credential-bearing app.db stay out of git.
 data/exports/
 
 # Legacy (pre-restructure) artifacts

@@ -64,10 +64,23 @@ def create_user(username: str, password: str, full_name: str, role: str,
 
 
 def ensure_default_admin() -> None:
-    """Create the default admin (flagged to change password) if no admin exists."""
-    if not has_admin():
-        create_user(config.DEFAULT_ADMIN_USERNAME, config.DEFAULT_ADMIN_PASSWORD,
-                    "Administratori", ADMIN, must_change=True)
+    """Create the default admin (flagged to change password) if no admin exists.
+    The bootstrap password comes from config (env var or git-ignored secrets_local);
+    if none is configured we generate a random one-time password and print it, so
+    no credential is ever hardcoded in the repository."""
+    if has_admin():
+        return
+    password = config.DEFAULT_ADMIN_PASSWORD
+    generated = False
+    if not password:
+        password = secrets.token_urlsafe(9)
+        generated = True
+    create_user(config.DEFAULT_ADMIN_USERNAME, password,
+                "Administratori", ADMIN, must_change=True)
+    if generated:
+        print(f"[DOKU] Krijova admin-in fillestar '{config.DEFAULT_ADMIN_USERNAME}' "
+              f"me fjalëkalim të përkohshëm: {password}  "
+              f"(do të kërkohet ndryshimi në hyrjen e parë).")
 
 
 def authenticate(username: str, password: str):

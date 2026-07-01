@@ -1,4 +1,5 @@
 """Central configuration for DOKU. All tunables live here."""
+import os
 from pathlib import Path
 
 # --- Paths ---
@@ -34,8 +35,27 @@ REFUSAL_MESSAGE = (
 )
 
 # --- Default administrator (auto-created if no admin exists) ---
-DEFAULT_ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "***REMOVED-CREDENTIAL***"
+# For security the real credentials are NEVER committed to the repo. They are
+# resolved at runtime from, in order of precedence:
+#   1. Environment variables  DOKU_ADMIN_USERNAME / DOKU_ADMIN_PASSWORD
+#   2. A git-ignored  secrets_local.py  (ADMIN_USERNAME / ADMIN_PASSWORD)
+#   3. If neither is set, auth.ensure_default_admin() generates a random one-time
+#      password and prints it once to the console.
+# The default admin is always forced to change its password on first login, so
+# this bootstrap value is only ever used a single time.
+def _local_secret(name: str):
+    try:
+        import secrets_local
+    except Exception:
+        return None
+    return getattr(secrets_local, name, None)
+
+DEFAULT_ADMIN_USERNAME = (
+    os.environ.get("DOKU_ADMIN_USERNAME") or _local_secret("ADMIN_USERNAME") or "admin"
+)
+DEFAULT_ADMIN_PASSWORD = (
+    os.environ.get("DOKU_ADMIN_PASSWORD") or _local_secret("ADMIN_PASSWORD") or None
+)
 
 # --- Domain enums ---
 DOCUMENT_TYPES = ["Ligj", "VKM", "Strategji", "Rregullore", "Udhëzim", "Raport", "Tjetër"]
