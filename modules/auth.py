@@ -43,7 +43,7 @@ def has_admin() -> bool:
 
 
 def create_user(username: str, password: str, full_name: str, role: str,
-                must_change: bool = False) -> None:
+                must_change: bool = False, department: str = "") -> None:
     """Validate and create a user. Raises ValueError on invalid input."""
     username = (username or "").strip()
     if not USERNAME_RE.match(username):
@@ -57,9 +57,9 @@ def create_user(username: str, password: str, full_name: str, role: str,
     with db.get_conn() as conn:
         conn.execute(
             "INSERT INTO users (username, password_hash, full_name, role, "
-            "must_change_password) VALUES (?, ?, ?, ?, ?)",
+            "must_change_password, department) VALUES (?, ?, ?, ?, ?, ?)",
             (username, hash_password(password), (full_name or "").strip(), role,
-             int(must_change)),
+             int(must_change), (department or "").strip()),
         )
 
 
@@ -129,6 +129,14 @@ def set_full_name(username: str, full_name: str) -> None:
         )
 
 
+def set_department(username: str, department: str) -> None:
+    with db.get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET department = ?, updated_at = datetime('now') "
+            "WHERE username = ?", ((department or "").strip(), username.strip()),
+        )
+
+
 def needs_password_change(username: str) -> bool:
     row = get_user(username)
     return bool(row) and bool(row["must_change_password"])
@@ -137,7 +145,7 @@ def needs_password_change(username: str) -> bool:
 def list_users():
     with db.get_conn() as conn:
         return conn.execute(
-            "SELECT id, username, full_name, role, is_active, created_at "
+            "SELECT id, username, full_name, department, role, is_active, created_at "
             "FROM users ORDER BY username"
         ).fetchall()
 

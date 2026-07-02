@@ -15,11 +15,18 @@ CREATE TABLE IF NOT EXISTS users (
     username      TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     full_name     TEXT,
+    department    TEXT NOT NULL DEFAULT '',
     role          TEXT NOT NULL CHECK (role IN ('admin', 'punonjes')),
     must_change_password INTEGER NOT NULL DEFAULT 0,
     is_active     INTEGER NOT NULL DEFAULT 1,
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -148,8 +155,16 @@ _schema_ready = False
 # a pre-built app.db is shipped), init_schema() does no write at all.
 _REQUIRED_TABLES = (
     "users", "documents", "chat_history", "audit_logs", "sessions",
-    "experiment_results",
+    "experiment_results", "settings",
 )
+
+
+def _migrate(conn) -> None:
+    """Additive, idempotent migrations for databases created before a column
+    existed. SQLite ALTER TABLE ADD COLUMN is cheap and non-destructive."""
+    user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+    if "department" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN department TEXT NOT NULL DEFAULT ''")
 
 
 def init_schema() -> None:
@@ -175,6 +190,7 @@ def init_schema() -> None:
                 }
                 if not all(table in existing for table in _REQUIRED_TABLES):
                     conn.executescript(SCHEMA)
+                _migrate(conn)
             _schema_ready = True
             return
         except sqlite3.OperationalError as err:

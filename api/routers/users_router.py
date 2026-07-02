@@ -11,7 +11,8 @@ router = APIRouter(prefix="/api/users", tags=["users"],
 
 def _row_out(u) -> dict:
     return {"id": u["id"], "username": u["username"],
-            "full_name": u["full_name"] or "", "role": u["role"],
+            "full_name": u["full_name"] or "", "department": u["department"] or "",
+            "role": u["role"],
             "is_active": bool(u["is_active"]), "created_at": u["created_at"] or ""}
 
 
@@ -37,7 +38,7 @@ def list_users():
 def create_user(body: schemas.UserCreateIn, admin=Depends(deps.require_admin)):
     try:
         auth.create_user(body.username, body.password, body.full_name,
-                         body.role, must_change=True)
+                         body.role, must_change=True, department=body.department)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     audit.log(admin["id"], admin["username"], "create_user",
@@ -61,6 +62,8 @@ def patch_user(username: str, body: schemas.UserPatchIn,
 
     if body.full_name is not None and body.full_name.strip() != (cur["full_name"] or ""):
         auth.set_full_name(username, body.full_name)
+    if body.department is not None and body.department.strip() != (cur["department"] or ""):
+        auth.set_department(username, body.department)
     if body.role is not None and body.role != cur["role"]:
         try:
             auth.set_role(username, body.role)

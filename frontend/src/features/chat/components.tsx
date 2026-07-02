@@ -12,6 +12,8 @@ export interface ChatMessage {
   kind: "question" | "answer";
   text: string;
   answer?: Answer;
+  /** true while tokens are still arriving over the SSE stream */
+  streaming?: boolean;
   at: Date;
 }
 
@@ -65,12 +67,12 @@ export function AnswerBubble({ message, onExport, exporting }: {
   onExport: (rowId: number) => void;
   exporting: boolean;
 }) {
-  const a = message.answer!;
+  const a = message.answer;
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(a.text);
+      await navigator.clipboard.writeText(a?.text ?? message.text);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -86,36 +88,43 @@ export function AnswerBubble({ message, onExport, exporting }: {
           <Bot className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1 rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-4 py-3 shadow-card dark:border-slate-800 dark:bg-slate-900">
-          <p className="whitespace-pre-wrap break-words text-sm text-slate-800 dark:text-slate-200">
-            {a.text}
+          <p className="whitespace-pre-wrap break-words text-sm text-slate-800 dark:text-slate-200"
+             aria-live={message.streaming ? "polite" : undefined}>
+            {a?.text ?? message.text}
+            {message.streaming && (
+              <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-doku-pulse bg-brand-500 align-middle"
+                    aria-hidden />
+            )}
           </p>
 
-          {a.sources.length > 0 && (
+          {a && a.sources.length > 0 && (
             <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-800">
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Burimet:</p>
               {a.sources.map((s) => <SourceLine key={s.n} source={s} />)}
             </div>
           )}
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2.5 dark:border-slate-800">
-            <Badge variant="brand">RAG</Badge>
-            {a.sources.length > 0 && <Badge variant="success">Me burime</Badge>}
-            <span className="text-xs text-slate-400 dark:text-slate-500">
-              ⏱ {formatSeconds(a.response_time)} · ngjashmëria {a.top_score.toFixed(2)}
-            </span>
-            <span className="ml-auto flex items-center gap-1">
-              <button onClick={copy} title="Kopjo përgjigjen" aria-label="Kopjo përgjigjen"
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800">
-                {copied ? <Check className="h-4 w-4 text-emerald-500" aria-hidden />
-                        : <Copy className="h-4 w-4" aria-hidden />}
-              </button>
-              <button onClick={() => onExport(a.row_id)} disabled={exporting}
-                      title="Shkarko në Word (.docx)" aria-label="Shkarko në Word"
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-800">
-                <Download className="h-4 w-4" aria-hidden />
-              </button>
-            </span>
-          </div>
+          {a && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+              <Badge variant="brand">RAG</Badge>
+              {a.sources.length > 0 && <Badge variant="success">Me burime</Badge>}
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                ⏱ {formatSeconds(a.response_time)} · ngjashmëria {a.top_score.toFixed(2)}
+              </span>
+              <span className="ml-auto flex items-center gap-1">
+                <button onClick={copy} title="Kopjo përgjigjen" aria-label="Kopjo përgjigjen"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800">
+                  {copied ? <Check className="h-4 w-4 text-emerald-500" aria-hidden />
+                          : <Copy className="h-4 w-4" aria-hidden />}
+                </button>
+                <button onClick={() => onExport(a.row_id)} disabled={exporting}
+                        title="Shkarko në Word (.docx)" aria-label="Shkarko në Word"
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-800">
+                  <Download className="h-4 w-4" aria-hidden />
+                </button>
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

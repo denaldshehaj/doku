@@ -276,6 +276,19 @@ export default function ReportsPage() {
 
             <div className="space-y-5">
               <Card>
+                <CardHeader title="Pyetje sipas departamentit"
+                            subtitle="Nga profili i përdoruesve" />
+                <CardBody>
+                  {loading ? <Skeleton className="h-24 w-full" /> : d && (
+                    d.by_department.length === 0
+                      ? <EmptyState title="Pa aktivitet" />
+                      : <HBarChart ariaLabel="Pyetjet sipas departamentit"
+                                   data={d.by_department.map((x) => ({
+                                     label: x.label, count: x.questions }))} />
+                  )}
+                </CardBody>
+              </Card>
+              <Card>
                 <CardHeader title="Korpusi"
                             subtitle={d ? `${d.documents_total} dokumente · ${d.chunks_total.toLocaleString("sq-AL")} copëza` : undefined} />
                 <CardBody>

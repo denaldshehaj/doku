@@ -120,11 +120,13 @@ class UserCreateIn(BaseModel):
     username: str
     password: str
     full_name: str = ""
+    department: str = ""
     role: str
 
 
 class UserPatchIn(BaseModel):
     full_name: str | None = None
+    department: str | None = None
     role: str | None = None
     is_active: bool | None = None
 
@@ -133,6 +135,7 @@ class UserRowOut(BaseModel):
     id: int
     username: str
     full_name: str
+    department: str
     role: str
     is_active: bool
     created_at: str

@@ -61,6 +61,13 @@ async def secure_headers(request: Request, call_next):
     # in an iframe on the same origin.
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("Referrer-Policy", "same-origin")
+    # Everything is same-origin by design (no CDNs, no external fonts/scripts).
+    # style 'unsafe-inline' is required for React style attributes; frame-src
+    # 'self' allows the same-origin PDF preview iframe.
+    response.headers.setdefault("Content-Security-Policy", (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; "
+        "frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"))
     if request.url.path.startswith("/api/"):
         response.headers.setdefault("Cache-Control", "no-store")
     return response

@@ -102,6 +102,50 @@ def answer_question(question: str, mode="rag", selected_document_id=None,
     )
 
 
+def answer_question_stream(question: str, mode="rag", selected_document_id=None,
+                           active_doc_ids=None, k=None):
+    """Streaming twin of answer_question with the identical grounding contract:
+    the refusal gate still runs BEFORE the LLM. Yields tuples:
+
+        ("refusal", Answer)  — gate refused; nothing was generated
+        ("delta", str)       — next generated text fragment
+        ("final", Answer)    — complete Answer (same fields as answer_question)
+    """
+    t0 = time.perf_counter()
+    chunks = vs.query(question, k=k, active_doc_ids=active_doc_ids,
+                      document_id=selected_document_id)
+    top = chunks[0].score if chunks else 0.0
+
+    # --- REFUSAL GATE (identical to the non-streaming path) ---
+    if not chunks or top < config.MIN_SIMILARITY:
+        yield ("refusal", Answer(config.REFUSAL_MESSAGE, refused=True,
+                                 retrieved=chunks, top_score=top,
+                                 response_time=round(time.perf_counter() - t0, 3)))
+        return
+
+    relevant = [c for c in chunks if c.score >= config.MIN_SIMILARITY] or chunks[:1]
+    prompt = _USER_PROMPT.format(context=_format_context(relevant), question=question)
+
+    parts: list[str] = []
+    for piece in llm_client.generate_stream(prompt, system=SYSTEM_PROMPT):
+        parts.append(piece)
+        yield ("delta", piece)
+    text = "".join(parts).strip()
+
+    refused = config.REFUSAL_MESSAGE[:30].lower() in text.lower() \
+        or "nuk gjendet" in text.lower()
+    if not refused and any(c.document_type in config.NORMATIVE_TYPES for c in relevant):
+        text += LEGAL_NOTE
+
+    yield ("final", Answer(
+        text, refused=refused,
+        sources=[] if refused else _sources(relevant),
+        retrieved=relevant, top_score=top,
+        response_time=round(time.perf_counter() - t0, 3),
+        chunks_used=0 if refused else len(relevant),
+    ))
+
+
 def answer_without_rag(question: str) -> tuple[str, float]:
     """Bare LLM answer (no retrieval) — used by the experiment module."""
     t0 = time.perf_counter()

@@ -25,17 +25,19 @@ function CreateUserModal({ open, onClose }: { open: boolean; onClose: () => void
   const queryClient = useQueryClient();
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
+  const [department, setDepartment] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("punonjes");
 
   const create = useMutation({
     mutationFn: () => usersApi.create({ username: username.trim(), password,
-                                        full_name: fullName.trim(), role }),
+                                        full_name: fullName.trim(),
+                                        department: department.trim(), role }),
     onSuccess: (u) => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       toast("success", `U krijua '${u.username}'`,
             "Do t'i kërkohet të ndryshojë fjalëkalimin në hyrjen e parë.");
-      setUsername(""); setFullName(""); setPassword(""); setRole("punonjes");
+      setUsername(""); setFullName(""); setDepartment(""); setPassword(""); setRole("punonjes");
       onClose();
     },
     onError: (err) => toast("error", "Krijimi dështoi",
@@ -74,6 +76,10 @@ function CreateUserModal({ open, onClose }: { open: boolean; onClose: () => void
             <option value="admin">Administrator</option>
           </Select>
         </div>
+        <Input label="Departamenti" value={department}
+               placeholder="p.sh. Drejtoria Juridike"
+               hint="Opsional — përdoret në raportet sipas departamentit."
+               onChange={(e) => setDepartment(e.target.value)} />
       </form>
     </Modal>
   );
@@ -84,6 +90,7 @@ function EditUserModal({ user, onClose }: { user: UserRow; onClose: () => void }
   const queryClient = useQueryClient();
   const { user: me } = useAuth();
   const [fullName, setFullName] = useState(user.full_name);
+  const [department, setDepartment] = useState(user.department);
   const [role, setRole] = useState<string>(user.role);
   const [active, setActive] = useState(user.is_active ? "1" : "0");
   const [newPassword, setNewPassword] = useState("");
@@ -92,7 +99,7 @@ function EditUserModal({ user, onClose }: { user: UserRow; onClose: () => void }
 
   const save = useMutation({
     mutationFn: () => usersApi.patch(user.username, {
-      full_name: fullName, role, is_active: active === "1",
+      full_name: fullName, department, role, is_active: active === "1",
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
@@ -143,8 +150,13 @@ function EditUserModal({ user, onClose }: { user: UserRow; onClose: () => void }
              </>
            }>
       <div className="space-y-4">
-        <Input label="Emri i plotë" value={fullName}
-               onChange={(e) => setFullName(e.target.value)} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input label="Emri i plotë" value={fullName}
+                 onChange={(e) => setFullName(e.target.value)} />
+          <Input label="Departamenti" value={department}
+                 placeholder="p.sh. Drejtoria Juridike"
+                 onChange={(e) => setDepartment(e.target.value)} />
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <Select label="Roli" value={role} onChange={(e) => setRole(e.target.value)}
                   disabled={isSelf}
@@ -248,6 +260,7 @@ export default function UsersPage() {
               <tr>
                 <Th>Përdoruesi</Th>
                 <Th className="hidden sm:table-cell">Emri i plotë</Th>
+                <Th className="hidden lg:table-cell">Departamenti</Th>
                 <Th>Roli</Th>
                 <Th>Statusi</Th>
                 <Th className="hidden md:table-cell">Krijuar</Th>
@@ -259,6 +272,7 @@ export default function UsersPage() {
                 <Tr key={u.id}>
                   <Td className="font-medium text-slate-800 dark:text-slate-100">{u.username}</Td>
                   <Td className="hidden sm:table-cell">{u.full_name || "—"}</Td>
+                  <Td className="hidden lg:table-cell">{u.department || "—"}</Td>
                   <Td>
                     <Badge variant={u.role === "admin" ? "brand" : "neutral"}>
                       {ROLE_LABELS[u.role] ?? u.role}

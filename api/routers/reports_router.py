@@ -1,10 +1,10 @@
 """Raporte & Statistika (admin-only).
 
 Everything is aggregated from data the system already records — chat_history,
-audit_logs, documents, experiment_results — so the module needs no schema
-change and can never show fabricated numbers. Refusals are detected by the
-exact REFUSAL_MESSAGE prefix the pipeline writes; citations are unpacked from
-sources_json with SQLite's json_each.
+audit_logs, documents, users — so the module can never show fabricated
+numbers. Refusals are detected by the exact REFUSAL_MESSAGE prefix the
+pipeline writes; citations are unpacked from sources_json with SQLite's
+json_each; departments come from users.department.
 
 One composite endpoint feeds the whole page (a local single-user dashboard
 doesn't benefit from seven round-trips), plus a CSV export for Excel.
@@ -183,6 +183,19 @@ def reports(days: int = Query(default=30),
                 [_REFUSAL_PREFIX, _since(days)]).fetchall()
         ]
 
+        # Questions per department (users.department joined over username).
+        by_department = [
+            {"label": r["d"], "questions": r["q"], "refused": r["r"] or 0}
+            for r in conn.execute(
+                "SELECT COALESCE(NULLIF(TRIM(u.department), ''), 'Pa departament') AS d, "
+                "COUNT(*) AS q, "
+                "SUM(CASE WHEN ch.answer LIKE ? THEN 1 ELSE 0 END) AS r "
+                "FROM chat_history ch JOIN users u ON u.username = ch.username "
+                "WHERE ch.mode = 'rag' AND ch.created_at >= datetime('now', ?) "
+                "GROUP BY d ORDER BY q DESC",
+                [_REFUSAL_PREFIX, _since(days)]).fetchall()
+        ]
+
         # Corpus snapshot (documents by type and status).
         corpus = [
             {"label": r["t"] or "Të tjera", "active": r["a"], "inactive": r["i"]}
@@ -217,6 +230,7 @@ def reports(days: int = Query(default=30),
         "citations_by_type": by_type,
         "top_documents": top_documents,
         "by_user": by_user,
+        "by_department": by_department,
         "corpus_by_type": corpus,
         "activity_by_action": activity,
         "usernames": usernames,
@@ -273,6 +287,8 @@ def export_csv(days: int = Query(default=30),
             ["Përdoruesi", "Pyetje", "Refuzime", "Përmbledhje", "Aktiviteti i fundit"],
             [[r["username"], r["questions"], r["refused"], r["summaries"], r["last_activity"]]
              for r in data["by_user"]])
+    section("Pyetje sipas departamentit", ["Departamenti", "Pyetje", "Refuzime"],
+            [[r["label"], r["questions"], r["refused"]] for r in data["by_department"]])
     section("Korpusi sipas tipit", ["Tipi", "Aktive", "Joaktive"],
             [[r["label"], r["active"], r["inactive"]] for r in data["corpus_by_type"]])
     section("Aktiviteti i sistemit (audit)", ["Veprimi", "Numri"],

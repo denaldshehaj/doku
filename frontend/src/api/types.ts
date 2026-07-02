@@ -111,6 +111,7 @@ export interface UserRow {
   id: number;
   username: string;
   full_name: string;
+  department: string;
   role: Role;
   is_active: boolean;
   created_at: string;
@@ -196,6 +197,7 @@ export interface ReportsData {
     summaries: number;
     last_activity: string;
   }[];
+  by_department: { label: string; questions: number; refused: number }[];
   corpus_by_type: { label: string; active: number; inactive: number }[];
   activity_by_action: { action: string; count: number }[];
   usernames: string[];

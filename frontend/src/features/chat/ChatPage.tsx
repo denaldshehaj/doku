@@ -1,8 +1,9 @@
 /* Biseda — RAG Q&A over the active corpus. The conversation lives in component
  * state for the session (every exchange is persisted server-side in history).
- * Layout: chat column + sources panel (xl and up), filters above the composer. */
+ * Answers stream in token-by-token over SSE; the refusal gate still answers
+ * instantly. Layout: chat column + sources panel (xl+), filters by composer. */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { SendHorizonal, SlidersHorizontal } from "lucide-react";
 import { ApiError } from "@/api/client";
 import { chatApi, documentsApi, metaApi } from "@/api/endpoints";
@@ -54,37 +55,64 @@ export default function ChatPage() {
       (!filters.keyword || (d.title ?? "").toLowerCase().includes(filters.keyword.toLowerCase())));
   }, [docs.data, filters]);
 
-  const ask = useMutation({
-    mutationFn: chatApi.ask,
-    onSuccess: (answer: Answer) => {
-      setMessages((list) => [...list, {
-        id: nextId.current++, kind: "answer", text: answer.text, answer, at: new Date(),
-      }]);
-    },
-    onError: (err) => {
-      const msg = err instanceof ApiError ? err.message : "Kërkesa dështoi.";
-      const isOllama = err instanceof ApiError && err.code === "ollama_unavailable";
-      toast("error", isOllama ? "Modeli lokal nuk është aktiv" : "Gabim gjatë përgjigjes", msg);
-    },
-  });
+  const [streaming, setStreaming] = useState(false);
+
+  const patchMessage = (id: number, patch: Partial<ChatMessage> | ((m: ChatMessage) => Partial<ChatMessage>)) => {
+    setMessages((list) => list.map((m) =>
+      m.id === id ? { ...m, ...(typeof patch === "function" ? patch(m) : patch) } : m));
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, ask.isPending]);
+  }, [messages, streaming]);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const q = question.trim();
-    if (!q || ask.isPending) return;
-    setMessages((list) => [...list, { id: nextId.current++, kind: "question", text: q, at: new Date() }]);
+    if (!q || streaming) return;
+    // Ids are allocated outside the state updater: updaters must stay pure
+    // (StrictMode double-invokes them in development).
+    const questionId = nextId.current++;
+    const answerId = nextId.current++;
+    setMessages((list) => [
+      ...list,
+      { id: questionId, kind: "question", text: q, at: new Date() },
+      { id: answerId, kind: "answer", text: "", streaming: true, at: new Date() },
+    ]);
     setQuestion("");
-    ask.mutate({
+    setStreaming(true);
+
+    void chatApi.askStream({
       question: q,
       document_id: filters.documentId ? Number(filters.documentId) : null,
       doc_type: filters.docType || null,
       institution: filters.institution || null,
       year: filters.year ? Number(filters.year) : null,
       title_kw: filters.keyword || null,
+    }, {
+      onDelta: (t) => {
+        patchMessage(answerId, (m) => ({ text: m.text + t }));
+      },
+      onRefusal: (answer: Answer) => {
+        patchMessage(answerId, { text: answer.text, answer, streaming: false });
+        setStreaming(false);
+      },
+      onDone: (answer: Answer) => {
+        patchMessage(answerId, { text: answer.text, answer, streaming: false });
+        setStreaming(false);
+      },
+      onError: (message, code) => {
+        // Drop the empty placeholder; keep any partial text with a note.
+        setMessages((list) => list
+          .map((m) => m.id === answerId && m.text
+            ? { ...m, streaming: false, text: m.text + "\n\n[Përgjigja u ndërpre]" }
+            : m)
+          .filter((m) => m.id !== answerId || m.text !== ""));
+        setStreaming(false);
+        toast("error",
+              code === "ollama_unavailable" ? "Modeli lokal nuk është aktiv" : "Gabim gjatë përgjigjes",
+              message);
+      },
     });
   };
 
@@ -125,19 +153,19 @@ export default function ChatPage() {
         {/* Chat column */}
         <div className="flex min-h-[60vh] flex-col rounded-2xl border border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
-            {messages.length === 0 && !ask.isPending ? (
+            {messages.length === 0 ? (
               <EmptyState title="Fillo bisedën"
                           description='Shembull: "Sa ditë leje vjetore kam të drejtë sipas legjislacionit në fuqi?"' />
             ) : (
-              messages.map((m) =>
-                m.kind === "question"
-                  ? <QuestionBubble key={m.id} message={m} />
-                  : m.answer?.refused
-                    ? <RefusalBubble key={m.id} message={m} />
-                    : <AnswerBubble key={m.id} message={m} onExport={onExport}
-                                    exporting={exportingRow === m.answer?.row_id} />)
+              messages.map((m) => {
+                if (m.kind === "question") return <QuestionBubble key={m.id} message={m} />;
+                if (m.answer?.refused) return <RefusalBubble key={m.id} message={m} />;
+                // Placeholder pa asnjë token ende: indikatori "duke analizuar".
+                if (m.streaming && m.text === "") return <TypingIndicator key={m.id} />;
+                return <AnswerBubble key={m.id} message={m} onExport={onExport}
+                                     exporting={exportingRow === m.answer?.row_id} />;
+              })
             )}
-            {ask.isPending && <TypingIndicator />}
             <div ref={bottomRef} />
           </div>
 
@@ -204,7 +232,7 @@ export default function ChatPage() {
                         }}
                         disabled={noActiveDocs} />
             </div>
-            <Button type="submit" size="lg" loading={ask.isPending}
+            <Button type="submit" size="lg" loading={streaming}
                     disabled={!question.trim() || noActiveDocs}>
               <SendHorizonal className="h-4 w-4" aria-hidden />
               <span className="hidden sm:inline">Dërgo</span>

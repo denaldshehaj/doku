@@ -28,9 +28,85 @@ export const metaApi = {
 };
 
 // --- Chat / RAG -----------------------------------------------------------------
+export interface StreamCallbacks {
+  onDelta: (text: string) => void;
+  onRefusal: (answer: Answer) => void;
+  onDone: (answer: Answer) => void;
+  onError: (message: string, code?: string) => void;
+}
+
 export const chatApi = {
   ask: (payload: AskPayload) => api.post<Answer>("/api/chat/ask", payload),
   exportAnswer: (rowId: number) => downloadFile(`/api/chat/${rowId}/export`),
+
+  /** Streaming ask over SSE (fetch + ReadableStream — EventSource can't POST).
+   * Exactly one terminal callback fires: onRefusal, onDone or onError. */
+  askStream: async (payload: AskPayload, cb: StreamCallbacks): Promise<void> => {
+    let res: Response;
+    try {
+      res = await fetch("/api/chat/ask-stream", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      cb.onError("Serveri lokal nuk po përgjigjet.");
+      return;
+    }
+    if (!res.ok || !res.body) {
+      const body = await res.json().catch(() => null);
+      const detail = (body as { detail?: unknown } | null)?.detail;
+      cb.onError(typeof detail === "string" ? detail : `Gabim serveri (${res.status}).`);
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let terminal = false;
+
+    const handle = (frame: string) => {
+      let event = "message";
+      const dataLines: string[] = [];
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event: ")) event = line.slice(7).trim();
+        else if (line.startsWith("data: ")) dataLines.push(line.slice(6));
+      }
+      if (dataLines.length === 0) return;
+      const data = JSON.parse(dataLines.join("\n"));
+      if (event === "delta") {
+        cb.onDelta((data as { t: string }).t);
+      } else if (event === "refusal") {
+        terminal = true;
+        cb.onRefusal(data as Answer);
+      } else if (event === "done") {
+        terminal = true;
+        cb.onDone(data as Answer);
+      } else if (event === "error") {
+        terminal = true;
+        const e = data as { message?: string; code?: string };
+        cb.onError(e.message ?? "Gabim gjatë gjenerimit.", e.code);
+      }
+    };
+
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buffer.indexOf("\n\n")) !== -1) {
+          const frame = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          if (frame.trim()) handle(frame);
+        }
+      }
+      if (!terminal) cb.onError("Lidhja u mbyll pa përfunduar përgjigjen.");
+    } catch {
+      if (!terminal) cb.onError("Lidhja me serverin u ndërpre gjatë përgjigjes.");
+    }
+  },
 };
 
 // --- Summaries -------------------------------------------------------------------
@@ -84,10 +160,12 @@ export const documentsApi = {
 // --- Users (admin) ---------------------------------------------------------------------
 export const usersApi = {
   list: () => api.get<UserRow[]>("/api/users"),
-  create: (data: { username: string; password: string; full_name: string; role: string }) =>
+  create: (data: { username: string; password: string; full_name: string;
+                   department: string; role: string }) =>
     api.post<UserRow>("/api/users", data),
   patch: (username: string,
-          data: { full_name?: string; role?: string; is_active?: boolean }) =>
+          data: { full_name?: string; department?: string; role?: string;
+                  is_active?: boolean }) =>
     api.patch<UserRow>(`/api/users/${encodeURIComponent(username)}`, data),
   setPassword: (username: string, password: string, mustChange: boolean) =>
     api.post<{ ok: boolean }>(`/api/users/${encodeURIComponent(username)}/password`,
