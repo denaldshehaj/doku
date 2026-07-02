@@ -1,5 +1,4 @@
 # DOKU dependencies (Python 3.13, local-only)
-streamlit
 fastapi
 uvicorn[standard]
 python-multipart
@@ -9,6 +8,10 @@ sentence-transformers
 ollama
 python-docx
 bcrypt
+
+# Dev / testing
+pytest
+httpx
 
 # Windows only: ships a current Microsoft Visual C++ runtime (msvcp140*.dll,
 # vcruntime140*.dll). PyTorch's and onnxruntime's native DLLs need it; older

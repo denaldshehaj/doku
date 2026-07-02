@@ -56,14 +56,15 @@ përgjigjen. Asnjë e dhënë nuk del nga makina lokale.
 | `modules/history.py` | Ruajtja e `chat_history`. |
 | `modules/export_docx.py` | Eksport Word (përgjigje + përmbledhje) te `data/exports/`. |
 | `modules/experiments.py` | Harness RAG vs pa-RAG + eksport CSV. |
-| `modules/ui.py` | Mbrojtëset e sesionit (`current_user`, `require_admin`). |
-| `views/1..8` | Faqet Streamlit (multipage), të filtruara sipas rolit — **legacy, deri në heqje**. |
+| `api/*` | Shtresa HTTP (FastAPI) mbi modulet — shih §2.1. |
 
-### 2.1 Ndërfaqja e re: React SPA + shtresa API FastAPI (korrik 2026)
+### 2.1 Ndërfaqja: React SPA + shtresa API FastAPI (korrik 2026)
 
-Ndërfaqja Streamlit u zëvendësua nga një frontend modern **React**, me një shtresë të
-hollë **FastAPI** mbi `modules/` ekzistues. Bërthama (RAG, indeksimi, citimet, porta e
-refuzimit, autentikimi bcrypt, SQLite/ChromaDB) mbetet **e pandryshuar** — API-ja vetëm
+Ndërfaqja Streamlit u zëvendësua plotësisht nga një frontend modern **React** (kodi
+Streamlit — `app.py`, `views/`, `modules/ui.py` — u hoq më 2026-07-02 pas konfirmimit
+të paritetit), me një shtresë të hollë **FastAPI** mbi `modules/` ekzistues. Bërthama
+(RAG, indeksimi, citimet, porta e refuzimit, autentikimi bcrypt, SQLite/ChromaDB)
+mbetet **e pandryshuar** — API-ja vetëm
 përkthen HTTP ↔ funksionet e moduleve, pa logjikë biznesi të vetën.
 
 ```

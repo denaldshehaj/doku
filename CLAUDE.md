@@ -13,18 +13,16 @@ government/institutional setting: an **admin** manages a centralized corpus; **e
 Python 3.13 · SQLite (users, documents, chat history, audit logs, experiments) ·
 ChromaDB (vectors) · PyMuPDF (PDF) · Sentence Transformers **bge-m3** embeddings ·
 Ollama local LLM (`OLLAMA_MODEL`) · python-docx.
-**UI/API (approved 2026-07-01, replacing Streamlit):** FastAPI (localhost-only, thin
+**UI/API (approved 2026-07-01, replaced Streamlit):** FastAPI (localhost-only, thin
 layer over `modules/`) + React 19 / Vite / TypeScript / Tailwind 4 / TanStack Query
-in `frontend/`. The legacy Streamlit UI (`app.py` + `views/`) remains runnable until
-full parity is confirmed, then gets removed.
+in `frontend/`. The Streamlit UI was removed 2026-07-02 after parity sign-off.
 NOT allowed: cloud APIs, OpenAI/Claude APIs, Docker, microservices, OCR, SSR/Next.js.
 
 ## Architecture (restructured to thesis spec)
 ```
-app.py                # entrypoint: login, session, role-based st.navigation
 config.py             # OLLAMA_MODEL, temperature, paths, thresholds, enums
 modules/
-  database.py         # SQLite schema (5 tables) + connection
+  database.py         # SQLite schema + connection (WAL, busy_timeout, retry)
   auth.py             # bcrypt, roles (admin/punonjes), default admin, forced change
   audit.py            # audit logging
   document_processor.py  # PyMuPDF extract + text validation + chunking
@@ -36,15 +34,13 @@ modules/
   history.py          # chat_history persistence
   export_docx.py      # Word export (answers + summaries) to data/exports/
   experiments.py      # RAG vs no-RAG harness + CSV export
-  ui.py               # session guards (current_user, require_admin)
-views/                # 1_Dashboard … 8_Eksperimente (legacy Streamlit multipage)
 api/                  # FastAPI layer over modules/ (no business logic of its own)
   main.py             # app + lifespan (schema/admin bootstrap, embeddings warmup) + SPA static
   deps.py             # cookie-session deps: require_user/require_admin + LLM semaphore
   schemas.py          # Pydantic request/response models
   tasks.py            # in-memory background tasks (reindex-all, experiment batches)
   routers/            # auth, meta/dashboard/system, chat, summaries, history,
-                      # documents, users, audit, experiments, tasks
+                      # documents, users, audit, experiments, reports, tasks
 run_api.py            # uvicorn launcher — binds 127.0.0.1:8000 ONLY
 frontend/             # React SPA (Vite + TS + Tailwind 4 + TanStack Query)
   src/api/            # typed client + endpoints (mirrors api/schemas.py)
@@ -89,18 +85,20 @@ password on first login. Admin creates employees (also forced to change on first
 - Setup: `py -3.13 -m venv .venv` → `pip install -r requirements.txt`
 - Model: `ollama pull qwen2.5:3b` (and optionally `ollama pull gemma2:9b`)
 - Seed demo corpus (optional): `python scripts\seed_sample_corpus.py`
-- **App (React UI): `.venv\Scripts\python run_api.py`** → http://127.0.0.1:8000
+- **App: `.venv\Scripts\python run_api.py`** → http://127.0.0.1:8000
   (serves the built SPA from `frontend/dist` + the API under `/api`; docs at `/api/docs`)
 - Frontend dev loop: `cd frontend` → `npm run dev` (Vite on :5173, proxies `/api` to :8000)
 - Frontend checks: `npm run build` (tsc + vite) and `npm run lint` — both must pass
-- Legacy Streamlit UI (until removal): `.venv\Scripts\streamlit run app.py`
+- API tests: `.venv\Scripts\python -m pytest tests\` (isolated temp DB, no Ollama needed)
 
 ## Current status
 - [x] Restructured to modules/ + pages/ per thesis spec; 5 DB tables; admin-managed auth
 - [x] Status active/inactive, full metadata, reindex-all, filtering, citations, legal note
 - [x] Summaries (4 formats), Word export to spec, experiment harness (manual eval + CSV)
 - [x] FastAPI layer over modules/ (cookie sessions, role guards, background tasks) +
-      React SPA (all 8 pages + login/forced-change) — E2E-tested 2026-07-02; Streamlit
-      still present, remove after user confirms parity
+      React SPA (all pages + login/forced-change) — E2E-tested 2026-07-02
+- [x] Raporte & Statistika module (admin): KPI deltas, SVG charts, CSV export, print/PDF
+- [x] Security hardening: login throttling, secure headers + CSP, no-store API responses
+- [x] Streamlit UI removed (2026-07-02, parity confirmed by user); single React+FastAPI stack
 
 See **SPEC.md** for milestones and **DOKUMENTACIONI.md** for the technical write-up.
