@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* Dark mode is driven by a `.dark` class on <html> (ThemeProvider). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Institutional navy — primary brand color (inspired by the references). */
+  --color-brand-50: #eef4fb;
+  --color-brand-100: #d9e5f7;
+  --color-brand-200: #b3cbee;
+  --color-brand-300: #85a9e0;
+  --color-brand-400: #5583cf;
+  --color-brand-500: #2f5fb8;
+  --color-brand-600: #1f4699;
+  --color-brand-700: #1a3a80;
+  --color-brand-800: #16306a;
+  --color-brand-900: #122753;
+  --color-brand-950: #0c1a38;
+
+  /* Albanian-flag red — identity accent (underlines, logo mark). */
+  --color-accent-500: #e11d2e;
+  --color-accent-600: #c31624;
+  --color-accent-700: #a11220;
+
+  --font-sans: "Segoe UI", "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.06), 0 1px 3px 0 rgb(16 24 40 / 0.1);
+  --shadow-pop: 0 4px 6px -2px rgb(16 24 40 / 0.05), 0 12px 16px -4px rgb(16 24 40 / 0.12);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-100 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-200;
+}
+
+/* Focus visibility (WCAG 2.4.7) — one consistent ring everywhere. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  @apply outline-2 outline-offset-2 outline-brand-500;
+}
+
+/* Subtle scrollbars that fit both themes. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.5) transparent;
+}
+
+@keyframes doku-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.animate-doku-pulse {
+  animation: doku-pulse 1.6s ease-in-out infinite;
+}
+
+/* Printable reports: hide the app chrome, keep only the report content.
+ * "Printo / PDF" në faqen e raporteve → Save as PDF jep raportin zyrtar. */
+@media print {
+  aside,
+  header,
+  footer {
+    display: none !important;
+  }
+
+  main {
+    overflow: visible !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  #report-root .shadow-card,
+  #report-root .shadow-pop {
+    box-shadow: none !important;
+  }
+
+  #report-root {
+    /* Break charts/tables cleanly across pages. */
+    & .rounded-2xl {
+      break-inside: avoid;
+    }
+  }
+}

@@ -1,0 +1,21 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { fileURLToPath } from "node:url";
+
+// Dev: Vite serves the SPA and proxies /api to the local FastAPI server, so
+// cookies stay same-origin and no CORS is ever needed.
+// Prod: `npm run build` emits dist/, which FastAPI serves directly.
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+  },
+  server: {
+    port: 5173,
+    proxy: { "/api": { target: "http://127.0.0.1:8000", changeOrigin: false } },
+  },
+  build: {
+    chunkSizeWarningLimit: 700,
+  },
+});

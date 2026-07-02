@@ -57,7 +57,33 @@ përgjigjen. Asnjë e dhënë nuk del nga makina lokale.
 | `modules/export_docx.py` | Eksport Word (përgjigje + përmbledhje) te `data/exports/`. |
 | `modules/experiments.py` | Harness RAG vs pa-RAG + eksport CSV. |
 | `modules/ui.py` | Mbrojtëset e sesionit (`current_user`, `require_admin`). |
-| `views/1..8` | Faqet Streamlit (multipage), të filtruara sipas rolit. |
+| `views/1..8` | Faqet Streamlit (multipage), të filtruara sipas rolit — **legacy, deri në heqje**. |
+
+### 2.1 Ndërfaqja e re: React SPA + shtresa API FastAPI (korrik 2026)
+
+Ndërfaqja Streamlit u zëvendësua nga një frontend modern **React**, me një shtresë të
+hollë **FastAPI** mbi `modules/` ekzistues. Bërthama (RAG, indeksimi, citimet, porta e
+refuzimit, autentikimi bcrypt, SQLite/ChromaDB) mbetet **e pandryshuar** — API-ja vetëm
+përkthen HTTP ↔ funksionet e moduleve, pa logjikë biznesi të vetën.
+
+```
+Shfletuesi ──► FastAPI (VETËM 127.0.0.1:8000)
+               ├── /api/*  ──► modules/  (të pandryshuara)
+               └── /       ──► frontend/dist (React SPA e ndërtuar)
+```
+
+| Komponenti | Detaje |
+|-----------|--------|
+| `api/deps.py` | Sesione me **cookie httpOnly** (ripërdor tabelën `sessions`; tokeni s'shfaqet më në URL) + `require_user`/`require_admin` të zbatuara në server + semafor LLM (1 gjenerim njëkohësisht — GPU 4GB). |
+| `api/routers/*` | auth, meta/dashboard/system, chat (RAG + eksport .docx), summaries, history, documents (upload/status/reindex/parapamje), users (me mbrojtjen e admin-it të fundit), audit, experiments, tasks. |
+| `api/tasks.py` | Operacionet e gjata (riindeksim korpusi, batch eksperimentesh) ekzekutohen në sfond; frontend-i ndjek progresin me polling te `GET /api/tasks/{id}`. |
+| `frontend/` | React 19 + Vite + TypeScript strikt + Tailwind 4 + TanStack Query. Faqe lazy-loaded (code splitting për route), dark/light mode, responsive (drawer në mobile), WCAG (label-e, fokus i dukshëm, ARIA). |
+| Faqet | Login → ndryshim i detyruar fjalëkalimi → Paneli, **Biseda** (chat me citime, score ngjashmërie, panel burimesh, refuzimi i stilizuar si gjendje e sistemit), Përmbledhje (4 formate + .docx), Historiku, dhe për adminin: Dokumentet, Përdoruesit, Audit Log, Eksperimentet (vlerësim manual inline + CSV). |
+| Siguria | Bind vetëm `127.0.0.1`; cookie `SameSite=Lax`; asnjë burim i jashtëm (fonte/CDN); guard-et e UI-së janë vetëm UX — kontrolli real bëhet në API. |
+
+Ekzekutimi: `python run_api.py` (shërben SPA + API në një port); zhvillimi i frontend-it:
+`npm run dev` në `frontend/` (proxy `/api` → :8000). Dokumentimi automatik i API-së:
+`/api/docs` (OpenAPI).
 
 ## 3. Rrjedha e të dhënave
 
